@@ -19,7 +19,10 @@ updown="${1:-}"
     echo "$help">&2 && exit 1
 
 #echo "END" && exit
-
+RED="\e[00;31m"
+RESET="\e[00;00m"
+BOLD="\e[00;01m"
+ITAL="\e[00;03m"
 currdir="$(pwd)"
 currdirbase="$(basename $currdir)"
 #if [[ "$currdirbase" != "phd_notes" ]]; then
@@ -58,19 +61,22 @@ countn=0
 ahead=()
 counta=0
 
-echo "# Git"
+echo -e "${BOLD}# Git${RESET}"
+
 for git_synced_dir in ${git_synced_dirs[@]}; do
     cd "$git_synced_dir"
     if ! git diff-index --quiet HEAD --; then
-        echo -n "NOT clean.  "
+        echo -en "${RED}NOT clean${RESET}.  " # In red color.
         not_clean[((countn++))]="$git_synced_dir"
     else
         echo -n "Clean.      "
     fi
 
     ahead_commits=$(git rev-list --oneline ^origin/master HEAD | wc -l)
-    [[ ${ahead_commits} -gt 0 ]] && ahead[((counta++))]="$git_synced_dir"
+    [[ ${ahead_commits} -gt 0 ]] && ahead[((counta++))]="$git_synced_dir" && \
+        ahead_commits=$RED$ahead_commits$RESET
     echo -ne "Ahead commits: ${ahead_commits}.    "
+
     echo "${git_synced_dir/$HOME/\~}"
 done
 cd "$currdir"
@@ -85,7 +91,7 @@ else
 fi
 
 if [ -z "$updown" ]; then
-    echo -e "\n# Git data\nphd_notes data"
+    echo -e "\n${BOLD}# Git data${RESET}\n${ITAL}phd_notes data${RESET}"
 
     set +e
     echo -n "Down:"
@@ -128,8 +134,7 @@ verbose_git_sync() {
     synced_dir="${git_synced_dirs[$1]}"
     cd "$synced_dir" #&& echo "moved to dir $synced_dir">&2 echo "failed to move"
     
-    echo ""
-    echo "### Synchronizing ${git_dir_desc[$1]} at ${synced_dir/$HOME/\~}"
+    echo -e "\n### Synchronizing ${ITAL}${git_dir_desc[$1]}${RESET} at ${synced_dir/$HOME/\~}"
 
     #git status -uno
     ahead_commits=$(git rev-list --oneline ^origin/master HEAD | wc -l)
@@ -147,7 +152,7 @@ verbose_git_sync() {
 #rsync_sync(){
 #}
 
-echo -e "\n### Synchronizing phd_notes data (rsync)"
+echo -e "\n### Synchronizing ${ITAL}phd_notes data${RESET} (rsync)"
 
 cd ${git_synced_dirs[0]}
 
