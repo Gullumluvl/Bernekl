@@ -46,7 +46,7 @@ host=$(hostname)
 case "$host" in
    Tuatara)
         git_synced_dirs=("$HOME"
-                         "$HOME/programTestingArea/mytools"
+                         "$HOME/mydvpt/mytools"
                          "$HOME/programTestingArea/SVGGuru"
                          "$HOME/texmf/tex/latex/beamer/themes"
                          "$HOME/Documents/biologie/these/phd_notes");;
