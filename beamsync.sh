@@ -27,28 +27,28 @@ currdirbase="$(basename $currdir)"
 #    exit 1
 #fi
 
-git_dir_desc=("phd_notes"
-              "home dotfiles"
+git_dir_desc=("home dotfiles"
+              "my bin tools"
               "SVGGuru"
               "beamer theme"
-              )
+              "phd_notes")
 
 host=$(hostname)
 #host_md5sum=$(hostname | md5sum | cut -f1)
 
 case "$host" in
    Tuatara)
-        git_synced_dirs=("$HOME/Documents/biologie/these/phd_notes"
-                         "$HOME"
+        git_synced_dirs=("$HOME"
+                         "$HOME/programTestingArea/mytools"
                          "$HOME/programTestingArea/SVGGuru"
                          "$HOME/texmf/tex/latex/beamer/themes"
-                         );;
+                         "$HOME/Documents/biologie/these/phd_notes");;
     ldog27|ldog31)
-        git_synced_dirs=("$HOME/Documents/these/phd_notes"
-                         "$HOME"
+        git_synced_dirs=("$HOME"
+                         "$HOME/mydvpt/mytools"
                          "$HOME/mydvpt/SVGGuru"
                          "$HOME/texmf/tex/latex/beamer/beamerthemes"
-                         );;
+                         "$HOME/Documents/these/phd_notes");;
 esac
 
 # Check that no git repository contains uncommitted change
@@ -75,7 +75,8 @@ for git_synced_dir in ${git_synced_dirs[@]}; do
 done
 cd "$currdir"
 
-cd ${git_synced_dirs[0]}
+
+cd ${git_synced_dirs[4]}
 
 if [[ "$host" = "ldog27" ]]; then
     remote="$HOME/ws2/mygitdata/phd_notes"
@@ -146,9 +147,6 @@ verbose_git_sync() {
 #rsync_sync(){
 #}
 
-# phd_notes
-verbose_git_sync 0
-
 echo -e "\n### Synchronizing phd_notes data (rsync)"
 
 cd ${git_synced_dirs[0]}
@@ -169,7 +167,10 @@ echo "Return code $?"
 set -e
 
 
-for dir_nb in {1..3}; do
+# phd_notes
+#verbose_git_sync 0
+
+for dir_nb in {0..4}; do
     verbose_git_sync "$dir_nb"
 done
 
