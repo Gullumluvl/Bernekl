@@ -20,6 +20,9 @@ updown="${1:-}"
 
 #echo "END" && exit
 RED="\e[00;31m"
+#BRED="\e[01;31m"
+CYAN="\e[00;36m"
+PURPL="\e[00;35m"
 RESET="\e[00;00m"
 #BOLD="\e[00;01m"
 BGREY="\e[01;30m"
@@ -68,19 +71,29 @@ echo -e "${BGREY}# Git${RESET}"
 
 for git_synced_dir in ${git_synced_dirs[@]}; do
     cd "$git_synced_dir"
+    notready=0
     if ! git diff-index --quiet HEAD --; then
         echo -en "${RED}NOT clean${RESET}  " # In red color.
         not_clean[((countn++))]="$git_synced_dir"
+        ((++notready))
     else
         echo -n "Clean      "
     fi
 
     ahead_commits=$(git rev-list --oneline ^origin/master HEAD | wc -l)
-    [[ ${ahead_commits} -gt 0 ]] && ahead[((counta++))]="$git_synced_dir" && \
-        ahead_commits=$RED$ahead_commits$RESET
-    echo -ne "Ahead commits: ${ahead_commits}    "
+    if [[ ${ahead_commits} -gt 0 ]]; then
+        ahead[((counta++))]="$git_synced_dir"
+        ahead_commits=$CYAN$ahead_commits$RESET
+        ((notready+=2))
+    fi
+    printf "Ahead commits: %2d    " ${ahead_commits}
 
-    echo "${git_synced_dir/$HOME/\~}"
+    case $notready in
+        1) echo -ne $RED ;;
+        2) echo -ne $CYAN ;;
+        3) echo -ne $PURPL ;;
+    esac
+    echo -e "${git_synced_dir/$HOME/\~}$RESET"
 done
 cd "$currdir"
 
