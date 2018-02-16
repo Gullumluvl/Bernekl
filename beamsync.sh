@@ -21,7 +21,8 @@ updown="${1:-}"
 #echo "END" && exit
 RED="\e[00;31m"
 RESET="\e[00;00m"
-BOLD="\e[00;01m"
+#BOLD="\e[00;01m"
+BGREY="\e[01;30m"
 ITAL="\e[00;03m"
 currdir="$(pwd)"
 currdirbase="$(basename $currdir)"
@@ -54,6 +55,8 @@ case "$host" in
                          "$HOME/Documents/these/phd_notes");;
 esac
 
+rsync_synced=4
+
 # Check that no git repository contains uncommitted change
 not_clean=()
 countn=0
@@ -61,28 +64,28 @@ countn=0
 ahead=()
 counta=0
 
-echo -e "${BOLD}# Git${RESET}"
+echo -e "${BGREY}# Git${RESET}"
 
 for git_synced_dir in ${git_synced_dirs[@]}; do
     cd "$git_synced_dir"
     if ! git diff-index --quiet HEAD --; then
-        echo -en "${RED}NOT clean${RESET}.  " # In red color.
+        echo -en "${RED}NOT clean${RESET}  " # In red color.
         not_clean[((countn++))]="$git_synced_dir"
     else
-        echo -n "Clean.      "
+        echo -n "Clean      "
     fi
 
     ahead_commits=$(git rev-list --oneline ^origin/master HEAD | wc -l)
     [[ ${ahead_commits} -gt 0 ]] && ahead[((counta++))]="$git_synced_dir" && \
         ahead_commits=$RED$ahead_commits$RESET
-    echo -ne "Ahead commits: ${ahead_commits}.    "
+    echo -ne "Ahead commits: ${ahead_commits}    "
 
     echo "${git_synced_dir/$HOME/\~}"
 done
 cd "$currdir"
 
 
-cd ${git_synced_dirs[4]}
+cd ${git_synced_dirs[$rsync_synced]}
 
 if [[ "$host" = "ldog27" ]]; then
     remote="$HOME/ws2/mygitdata/phd_notes"
@@ -91,7 +94,7 @@ else
 fi
 
 if [ -z "$updown" ]; then
-    echo -e "\n${BOLD}# Git data${RESET}\n${ITAL}phd_notes data${RESET}"
+    echo -e "\n${BGREY}# Git data${RESET}\n${ITAL}phd_notes data${RESET}"
 
     set +e
     echo -n "Down:"
@@ -152,9 +155,16 @@ verbose_git_sync() {
 #rsync_sync(){
 #}
 
-echo -e "\n### Synchronizing ${ITAL}phd_notes data${RESET} (rsync)"
 
-cd ${git_synced_dirs[0]}
+# Git
+for dir_nb in {0..4}; do
+    verbose_git_sync "$dir_nb"
+done
+
+# Git data
+echo -e "\n${BGREY}# Git Data${RESET}\n### Synchronizing ${ITAL}phd_notes data${RESET} (rsync)"
+
+cd ${git_synced_dirs[$rsync_synced]}
 
 if [[ "$host" = "ldog27" ]]; then
     remote="$HOME/ws2/mygitdata/phd_notes"
@@ -168,15 +178,9 @@ if [[ "$updown" = "down" ]]; then
 else
     rsync -rauOvh --files-from="gitdata.index" ./ "$remote/"
 fi
-echo "Return code $?"
+rsync_return=$?
 set -e
+[[ "$rsync_return" -ne 0 ]] && echo "Return code ${RED}${rsync_return}${RESET}"
 
-
-# phd_notes
-#verbose_git_sync 0
-
-for dir_nb in {0..4}; do
-    verbose_git_sync "$dir_nb"
-done
 
 cd "$currdir"
