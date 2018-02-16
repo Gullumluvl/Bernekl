@@ -3,10 +3,10 @@
 set -euo pipefail
 IFS=$'\t\n'
 
-help="USAGE: $0 [<up|down>] [-h]
+help="USAGE: $0 [<u|up|d|down>] [-h]
 No argument:  print the state of the repositories;
-         up:  upload (push);
-       down:  download (pull);
+       u/up:  upload (push);
+     d/down:  download (pull);
          -h:  show help."
 
 # synchronize up or down?
@@ -15,7 +15,7 @@ updown="${1:-}"
 # Check args
 [[ $# -gt 1 ]]         && echo "$help" >&2 && exit 1
 [[ "$updown" = "-h" ]] && echo "$help" >&2 && exit 0
-[[ -n "$updown" ]] && [[ ! "$updown" =~ ^up|down$ ]] && \
+[[ -n "$updown" ]] && [[ ! "$updown" =~ ^(u|up|d|down)$ ]] && \
     echo "$help">&2 && exit 1
 
 #echo "END" && exit
@@ -130,7 +130,7 @@ if [[ ${#not_clean[@]} -gt 0 ]]; then
     exit 1
 fi
 
-if [[ "$updown" = "down" ]] && [[ ${#ahead[@]} -gt 0 ]]; then
+if [[ "$updown" =~ ^(d|down)$ ]] && [[ ${#ahead[@]} -gt 0 ]]; then
     echo "Ahead commits should be pushed before pulling:" >&2
     for dir in ${ahead[@]}; do
         echo "    ${dir}" >&2
@@ -155,7 +155,7 @@ verbose_git_sync() {
 
     #git status -uno
     ahead_commits=$(git rev-list --oneline ^origin/master HEAD | wc -l)
-    if [[ "$updown" = "down" ]]; then
+    if [[ "$updown" =~ ^(d|down)$ ]]; then
         git pull
     elif [[ "$ahead_commits" -eq 0 ]]; then
         echo "Nothing to push"
@@ -187,7 +187,7 @@ else
 fi
 
 set +e
-if [[ "$updown" = "down" ]]; then
+if [[ "$updown" =~ "^(d|down)$" ]]; then
     rsync -rauOvh --files-from="gitdata.index" "$remote/" ./
 else
     rsync -rauOvh --files-from="gitdata.index" ./ "$remote/"
