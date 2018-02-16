@@ -81,12 +81,13 @@ for git_synced_dir in ${git_synced_dirs[@]}; do
     fi
 
     ahead_commits=$(git rev-list --oneline ^origin/master HEAD | wc -l)
+    ahead_col=""
     if [[ ${ahead_commits} -gt 0 ]]; then
         ahead[((counta++))]="$git_synced_dir"
-        ahead_commits=$CYAN$ahead_commits$RESET
+        ahead_col=$CYAN
         ((notready+=2))
     fi
-    printf "Ahead commits: %2d    " ${ahead_commits}
+    printf "Ahead commits: ${ahead_col}%2d$RESET    " ${ahead_commits}
 
     case $notready in
         1) echo -ne $RED ;;
