@@ -181,7 +181,7 @@ verbose_git_sync() {
 #typeset -i i Ndirs
 Ndirs=${#git_synced_dirs[@]}
 
-for ((i=0; i<=Ndirs; i++)); do
+for ((i=0; i<Ndirs; i++)); do
     verbose_git_sync $i
 done
 
