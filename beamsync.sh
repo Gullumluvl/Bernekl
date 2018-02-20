@@ -38,6 +38,7 @@ git_dir_desc=("home dotfiles"
               "my bin tools"
               "SVGGuru"
               "beamer theme"
+              "latex-biota"
               "phd_notes")
 
 host=$(hostname)
@@ -59,6 +60,9 @@ case "$host" in
                          "$HOME/mydvpt/latex-biota"
                          "$HOME/Documents/these/phd_notes");;
 esac
+
+[[ "${#git_dir_desc[@]}" -ne "${#git_synced_dirs[@]}" ]] && \
+    echo "Description and directory lists don't match">&2 && exit 1
 
 #rsync_synced=-1
 rsync_synced="$HOME/Documents/these/phd_notes"
