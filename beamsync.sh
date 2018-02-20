@@ -60,7 +60,8 @@ case "$host" in
                          "$HOME/Documents/these/phd_notes");;
 esac
 
-rsync_synced=4
+#rsync_synced=-1
+rsync_synced="$HOME/Documents/these/phd_notes"
 
 # Check that no git repository contains uncommitted change
 not_clean=()
@@ -101,7 +102,7 @@ done
 cd "$currdir"
 
 
-cd ${git_synced_dirs[$rsync_synced]}
+cd "$rsync_synced"
 
 if [[ "$host" = "ldog27" ]]; then
     remote="$HOME/ws2/mygitdata/phd_notes"
@@ -180,7 +181,7 @@ done
 # Git data
 echo -e "\n${BGREY}# Git Data${RESET}\n### Synchronizing ${ITAL}phd_notes data${RESET} (rsync)"
 
-cd ${git_synced_dirs[$rsync_synced]}
+cd "$rsync_synced"
 
 if [[ "$host" = "ldog27" ]]; then
     remote="$HOME/ws2/mygitdata/phd_notes"
