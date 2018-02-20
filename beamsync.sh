@@ -178,8 +178,11 @@ verbose_git_sync() {
 
 
 # Git
-for dir_nb in {0..4}; do
-    verbose_git_sync "$dir_nb"
+#typeset -i i Ndirs
+Ndirs=${#git_synced_dirs[@]}
+
+for ((i=0; i<=Ndirs; i++)); do
+    verbose_git_sync $i
 done
 
 # Git data
