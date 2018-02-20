@@ -49,12 +49,14 @@ case "$host" in
                          "$HOME/mydvpt/mytools"
                          "$HOME/programTestingArea/SVGGuru"
                          "$HOME/texmf/tex/latex/beamer/themes"
+                         "$HOME/mydvpt/latex-biota"
                          "$HOME/Documents/biologie/these/phd_notes");;
     ldog27|ldog31)
         git_synced_dirs=("$HOME"
                          "$HOME/mydvpt/mytools"
                          "$HOME/mydvpt/SVGGuru"
                          "$HOME/texmf/tex/latex/beamer/beamerthemes"
+                         "$HOME/mydvpt/latex-biota"
                          "$HOME/Documents/these/phd_notes");;
 esac
 
