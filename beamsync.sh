@@ -64,8 +64,8 @@ esac
 [[ "${#git_dir_desc[@]}" -ne "${#git_synced_dirs[@]}" ]] && \
     echo "Description and directory lists don't match">&2 && exit 1
 
-#rsync_synced=-1
-rsync_synced="$HOME/Documents/these/phd_notes"
+rsync_synced=-1
+#rsync_synced="$HOME/Documents/these/phd_notes"
 
 # Check that no git repository contains uncommitted change
 not_clean=()
@@ -106,7 +106,7 @@ done
 cd "$currdir"
 
 
-cd "$rsync_synced"
+cd "${git_synced_dirs[$rsync_synced]}"
 
 if [[ "$host" = "ldog27" ]]; then
     remote="$HOME/ws2/mygitdata/phd_notes"
@@ -188,7 +188,7 @@ done
 # Git data
 echo -e "\n${BGREY}# Git Data${RESET}\n### Synchronizing ${ITAL}phd_notes data${RESET} (rsync)"
 
-cd "$rsync_synced"
+cd "${git_synced_dirs[$rsync_synced]}"
 
 if [[ "$host" = "ldog27" ]]; then
     remote="$HOME/ws2/mygitdata/phd_notes"
