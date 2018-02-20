@@ -204,7 +204,7 @@ else
 fi
 rsync_return=$?
 set -e
-[[ "$rsync_return" -ne 0 ]] && echo "Return code ${RED}${rsync_return}${RESET}"
+[[ "$rsync_return" -ne 0 ]] && echo -e "Return code ${RED}${rsync_return}${RESET}"
 
 
 cd "$currdir"
