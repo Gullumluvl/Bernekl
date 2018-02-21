@@ -178,10 +178,9 @@ verbose_git_sync() {
 
 
 # Git
-#typeset -i i Ndirs
-Ndirs=${#git_synced_dirs[@]}
 
-for ((i=0; i<Ndirs; i++)); do
+# Enumerate indices
+for i in ${!git_synced_dirs[@]}; do
     verbose_git_sync $i
 done
 
