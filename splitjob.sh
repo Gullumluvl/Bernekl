@@ -71,15 +71,15 @@ while getopts "hnp:i:o:I:O:H:" opt; do
         #    ;;
     esac
 done
-echo ' - Read options.'
+#echo ' - Read options.'
 
 shift $((OPTIND-1))
-echo ' - Shifted args.'
+#echo ' - Shifted args.'
 
 #[ "$1" = "--" ] && shift
 
 [ -z "$*" ] && echo "$help" && exit 1
-echo ' - Checked args presence.'
+#echo ' - Checked args presence.'
 
 IFS=' ' command="$*"
 IFS=$'\t\n'
@@ -97,22 +97,18 @@ fi
 
 for optval in "$nparts" "$iheader" "$oheader"; do
     # Check integer options
-    [[ ! "$optval" =~ ^[0-9]+$ ]] && echo -e "Integer required">&2 && exit 1
+    [[ ! "$optval" =~ ^[0-9]+$ ]] && echo "Integer required">&2 && exit 1
+    # TODO: do not allow zero value
 done
-echo ' - Checked integer options.'
+#echo ' - Checked integer options.'
 
-# Split input files
+maxpart=$(( ${#nparts} - 1 ))
+sufflen="${#maxpart}"
 
-#ilinecounts=()
-#olinecounts=()
-#for ii in ${!inputs[@]}; do
-#    ilinecounts[$ii]=$(wc -l ${inputs[$ii]} | cut -d' ' -f1)
-#    lcount=$(wc -l ${inputs[$ii]} | cut -d' ' -f1)
-
-sufflen="${#nparts}"
-if [[ "$sufflen" =~ ^10+$ ]]; then
-    (( --sufflen )) || echo "suffixe length can't be zero">&2 && exit 1
-fi
+#sufflen="${#nparts}"
+#if [[ "$sufflen" =~ ^10+$ ]]; then
+#    (( --sufflen )) || echo "suffixe length can't be zero">&2 && exit 1
+#fi
 
 echo "- DEBUG:
     - nparts:  $nparts
@@ -123,6 +119,23 @@ echo "- DEBUG:
     - sufflen: $sufflen
     - command:     '$command'"
 
+# Cleanup temporary files in case of error
+clean_exit() {
+    last_exit=$?
+    echo "Cleaning Temporary files.">&2
+    for input in ${inputs[@]:-}; do
+        rm -v ${input}-+([0-9]) || :
+    done
+    for output in ${outputs[@]:-}; do
+        rm -v ${output}-+([0-9]) || :
+    done
+
+    exit $last_exit
+}
+
+((dryrun)) || trap clean_exit ERR SIGINT SIGTERM EXIT
+
+# Split input files
 
 #if (( ${#inputs} )); then
 for input in ${inputs[@]:-}; do
@@ -142,7 +155,10 @@ for input in ${inputs[@]:-}; do
             #tail -n +$((iheader+1)) "$input" | split -d -a $sufflen -n "l/$nparts" - "${input}-"
             header="$(head -n $iheader $input)"
             # Precede each newline by a backslash and insert header
-            sed -i "1i ${header//$'\n'/\\$'\n'}" ${input}-*([0-9])[1-9] # fails if no file
+            # fails if no file
+            sed -i "1i ${header//$'\n'/\\$'\n'}" ${input}-*([0-9])[1-9] || \
+                { echo "Can't insert header: no input parts available.">&2 ;
+                 exit 1; }
         fi
     fi
 done
@@ -150,33 +166,56 @@ done
 
 #inpatt=$((for if in ${inputs[@]}; do echo "${if}-%0${#nparts}d"; done))
 #outpatt=$((for of in ${inputs[@]}; do echo "${of}-%0${#nparts}d"; done))
-allpatt=($(for f in ${all[@]:-}; do echo "${f}-%0${#nparts}d"; done))
-#echo "allpatt: ${allpatt[*]:-}"
+#allpatt=($(for f in ${all[@]:-}; do echo "${f}-%0${#nparts}d"; done))
+#if (( ${#all[@]} )); then
+#    allpatt=(${all[@]/%/-%0${#nparts}d})
+#else
+#    allpatt=()
+#fi
+#echo "allpatt: ${allpatt[*]:-}" && exit
 
 allpids=()
+allparts=$( seq -f "%0${sufflen}.0f" 0 "$((nparts-1))" )
 
-for (( part=0; part<nparts; part++ )); do
-    allparts=($(for p in ${allpatt[@]:-}; do printf "$p\n" $part; done))
-    #echo "allparts: ${allparts[*]:-}"
-    cmd=$(printf "$command" ${allparts[@]:-})
+for part in $allparts; do
+    #allpartfiles=($(for p in ${allpatt[@]:-}; do printf "$p\n" $part; done))
+    
+    #printf "IFS=%q\n" "$IFS"
+
+    # Append suffix to all filenames
+    if (( ${#all[@]} )); then
+        allpartfiles=(${all[*]/%/-$part})
+    fi
+    #echo "allpartfiles: ${allpartfiles[@]/#/>}"
+    cmd=$( printf "$command" ${allpartfiles[@]:-} )
     if (( dryrun )); then
         echo '$' "$cmd"
     else
-        eval "$cmd" &
+        #echo '$' "$cmd"
+        eval "$cmd &"
         allpids+=($!)
     fi
 done
 
-echo "allpids: (${allpids[*]:-})"
+(( dryrun )) && exit
 
-if (( dryrun )); then exit; fi
+echo "allpids: (${allpids[@]:-})" >&2
 
-wait ${allpids[@]}
+#wait ${allpids[@]}
+waitreturns=()
 
-for input in ${inputs[@]:-}; do
-    #ls ${input}-+([0-9])
-    rm -v ${input}-+([0-9])
+set +e
+for ipid in ${!allpids[@]}; do
+    wait ${allpids[$ipid]}
+    waitreturn=$?
+    (( waitreturn == 127 )) && echo "NO BACKGROUND PROCESSES FOUND!">&2 && exit 127
+    if ((waitreturn != 0 )); then
+        echo "Part $ipid failed ($waitreturn)!">&2
+    fi
+    waitreturns+=($waitreturn)
 done
+set -e
+
 for output in ${outputs[@]:-}; do
     if (( oheader )); then
         #sed -s '$R'
@@ -186,5 +225,9 @@ for output in ${outputs[@]:-}; do
     else
         cat ${output}-+([0-9]) > $output
     fi
-    rm -v ${output}-+([0-9])
 done
+
+trap - ERR SIGINT SIGTERM EXIT
+
+echo "Part return codes: ${waitreturns[@]}" >&2
+clean_exit
