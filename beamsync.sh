@@ -2,15 +2,26 @@
 
 set -euo pipefail
 IFS=$'\t\n'
+#shopt extglob
+shopt -s extglob # Off by default in a script
 
 help="USAGE: $0 [<u|up|d|down>] [-h]
 No argument:  print the state of the repositories;
        u/up:  upload (push);
      d/down:  download (pull);
-         -h:  show help."
+         -h:  show help.
+         
+Requires the file ~/beamsync.list.
+Formatted like: tab separated list of synchronized directories:
+Column 1	Column 2	(Column 3, optional)
+path	description	rsync remote repository
+
+~ or \$HOME is replaced by the \$HOME value.
+"
 
 # synchronize up or down?
 updown="${1:-}"
+echo $updown
 
 # Check args
 [[ $# -gt 1 ]]         && echo "$help" >&2 && exit 1
@@ -28,44 +39,68 @@ RESET="\e[00;00m"
 BGREY="\e[01;30m"
 ITAL="\e[00;03m"
 currdir="$(pwd)"
-currdirbase="$(basename $currdir)"
+
+#currdirbase="$(basename $currdir)"
 #if [[ "$currdirbase" != "phd_notes" ]]; then
 #    echo "This script must be run from the 'phd_notes' directory." >&2
 #    exit 1
 #fi
 
-git_dir_desc=("home dotfiles"
-              "my bin tools"
-              "SVGGuru"
-              "beamer theme"
-              "latex-biota"
-              "phd_notes")
+#git_dir_desc=("home dotfiles"
+#              #"my bin tools"
+#              "SVGGuru"
+#              "beamer theme"
+#              "latex-biota"
+#              "phd_notes")
+#
+#host=$(hostname)
+##host_md5sum=$(hostname | md5sum | cut -f1)
+#
+#case "$host" in
+#   Tuatara)
+#        git_synced_dirs=("$HOME"
+#                         #"$HOME/mydvpt/mytools"
+#                         "$HOME/programTestingArea/SVGGuru"
+#                         "$HOME/texmf/tex/latex/beamer/themes"
+#                         "$HOME/mydvpt/latex-biota"
+#                         "$HOME/Documents/biologie/these/phd_notes");;
+#    ldog27|ldog31)
+#        git_synced_dirs=("$HOME"
+#                         "$HOME/mydvpt/mytools"
+#                         "$HOME/mydvpt/SVGGuru"
+#                         "$HOME/texmf/tex/latex/beamer/beamerthemes"
+#                         "$HOME/mydvpt/latex-biota"
+#                         "$HOME/Documents/these/phd_notes");;
+#esac
+#
+#[[ "${#git_dir_desc[@]}" -ne "${#git_synced_dirs[@]}" ]] && \
+#    echo "Description and directory lists don't match">&2 && exit 1
+#
+#rsync_synced=-1
+##rsync_synced="$HOME/Documents/these/phd_notes"
 
-host=$(hostname)
-#host_md5sum=$(hostname | md5sum | cut -f1)
+listfile="$HOME/beamsync.list"
+[[ ! -f "$listfile" ]] && echo "File $listfile not found." >&2 && exit 1
 
-case "$host" in
-   Tuatara)
-        git_synced_dirs=("$HOME"
-                         "$HOME/mydvpt/mytools"
-                         "$HOME/programTestingArea/SVGGuru"
-                         "$HOME/texmf/tex/latex/beamer/themes"
-                         "$HOME/mydvpt/latex-biota"
-                         "$HOME/Documents/biologie/these/phd_notes");;
-    ldog27|ldog31)
-        git_synced_dirs=("$HOME"
-                         "$HOME/mydvpt/mytools"
-                         "$HOME/mydvpt/SVGGuru"
-                         "$HOME/texmf/tex/latex/beamer/beamerthemes"
-                         "$HOME/mydvpt/latex-biota"
-                         "$HOME/Documents/these/phd_notes");;
-esac
+git_synced_dirs=()
+git_dir_desc=()
+rsync_synced=()
+rsync_remotes=()
 
-[[ "${#git_dir_desc[@]}" -ne "${#git_synced_dirs[@]}" ]] && \
-    echo "Description and directory lists don't match">&2 && exit 1
-
-rsync_synced=-1
-#rsync_synced="$HOME/Documents/these/phd_notes"
+dircount=0
+while read -a line; do
+    if [[ ! "${line[0]}" =~ ^# ]]; then
+        git_synced_dirs+=("${line[0]/+(\~|\$HOME)/$HOME}")
+        git_dir_desc+=("${line[1]}")
+        if [[ ${#line[@]} -ge 3 ]] && [[ ! "${line[2]}" =~ ^# ]]; then
+            rsync_synced+=($dircount)
+            rsync_remotes+=("${line[2]}")
+        else
+            rsync_remotes+=("")
+        fi
+        ((++dircount))
+    fi
+done < "$listfile"
 
 # Check that no git repository contains uncommitted change
 not_clean=()
@@ -105,25 +140,29 @@ for git_synced_dir in ${git_synced_dirs[@]}; do
 done
 cd "$currdir"
 
-
-cd "${git_synced_dirs[$rsync_synced]}"
-
-if [[ "$host" = "ldog27" ]]; then
-    remote="$HOME/ws2/mygitdata/phd_notes"
-else
-    remote="dyojord:ws2/mygitdata/phd_notes"
-fi
-
 if [ -z "$updown" ]; then
-    echo -e "\n${BGREY}# Git data${RESET}\n${ITAL}phd_notes data${RESET}"
+    for rsync_i in ${rsync_synced[@]}; do
+    
+        cd "${git_synced_dirs[$rsync_i]}"
+        rsync_desc="${git_dir_desc[$rsync_i]}"
+        remote="${rsync_remotes[$rsync_i]}"
 
-    set +e
-    echo -n "Down:"
-    rsync -aruOh -n --stats --files-from="gitdata.index" "$remote/" ./ | head -5
-    echo -n "Up:" 
-    rsync -aruOh -n --stats --files-from="gitdata.index" ./ "$remote/" | head -5
-    #echo "Return code $?"
-    set -e
+        #if [[ "$host" = "ldog27" ]]; then
+        #    remote="$HOME/ws2/mygitdata/phd_notes"
+        #else
+        #    remote="dyojord:ws2/mygitdata/phd_notes"
+        #fi
+
+        echo -e "\n${BGREY}# Git data${RESET}\n${ITAL}$rsync_desc data${RESET}"
+
+        set +e
+        echo -n "Down:"
+        rsync -aruOh -n --stats --files-from="gitdata.index" "$remote/" ./ | head -5
+        echo -n "Up:" 
+        rsync -aruOh -n --stats --files-from="gitdata.index" ./ "$remote/" | head -5
+        #echo "Return code $?"
+        set -e
+    done
 
     echo "Done.">&2
     exit
@@ -185,25 +224,25 @@ for i in ${!git_synced_dirs[@]}; do
 done
 
 # Git data
-echo -e "\n${BGREY}# Git Data${RESET}\n### Synchronizing ${ITAL}phd_notes data${RESET} (rsync)"
+echo -e "\n${BGREY}# Git Data${RESET}"
+for rsync_i in ${rsync_synced}; do
+    cd "${git_synced_dirs[$rsync_i]}"
+    rsync_desc="${git_dir_desc[$rsync_i]}"
+    remote="${rsync_remotes[$rsync_i]}"
+    echo -e "### Synchronizing ${ITAL}$rsync_desc data${RESET} (rsync)"
 
-cd "${git_synced_dirs[$rsync_synced]}"
-
-if [[ "$host" = "ldog27" ]]; then
-    remote="$HOME/ws2/mygitdata/phd_notes"
-else
-    remote="dyojord:ws2/mygitdata/phd_notes"
-fi
-
-set +e
-if [[ "$updown" =~ "^(d|down)$" ]]; then
-    rsync -rauOvh --files-from="gitdata.index" "$remote/" ./
-else
-    rsync -rauOvh --files-from="gitdata.index" ./ "$remote/"
-fi
-rsync_return=$?
-set -e
-[[ "$rsync_return" -ne 0 ]] && echo -e "Return code ${RED}${rsync_return}${RESET}"
+    set +e
+    if [[ "$updown" =~ ^(d|down)$ ]]; then
+        echo "Down:"
+        rsync -rauOvh --files-from="gitdata.index" "$remote/" ./
+    else
+        echo "Up:"
+        rsync -rauOvh --files-from="gitdata.index" ./ "$remote/"
+    fi
+    rsync_return=$?
+    set -e
+    [[ "$rsync_return" -ne 0 ]] && echo -e "Return code ${RED}${rsync_return}${RESET}"
+done
 
 
 cd "$currdir"
