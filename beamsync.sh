@@ -92,11 +92,9 @@ while read -a line; do
     if [[ ! "${line[0]}" =~ ^# ]]; then
         git_synced_dirs+=("${line[0]/+(\~|\$HOME)/$HOME}")
         git_dir_desc+=("${line[1]}")
+        rsync_remotes+=("${line[2]:-}")
         if [[ ${#line[@]} -ge 3 ]] && [[ ! "${line[2]}" =~ ^# ]]; then
             rsync_synced+=($dircount)
-            rsync_remotes+=("${line[2]}")
-        else
-            rsync_remotes+=("")
         fi
         ((++dircount))
     fi
@@ -224,8 +222,11 @@ for i in ${!git_synced_dirs[@]}; do
 done
 
 # Git data
+
+if 
+
 echo -e "\n${BGREY}# Git Data${RESET}"
-for rsync_i in ${rsync_synced}; do
+for rsync_i in ${rsync_synced[@]}; do
     cd "${git_synced_dirs[$rsync_i]}"
     rsync_desc="${git_dir_desc[$rsync_i]}"
     remote="${rsync_remotes[$rsync_i]}"
