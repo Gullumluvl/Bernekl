@@ -222,9 +222,6 @@ for i in ${!git_synced_dirs[@]}; do
 done
 
 # Git data
-
-if 
-
 echo -e "\n${BGREY}# Git Data${RESET}"
 for rsync_i in ${rsync_synced[@]}; do
     cd "${git_synced_dirs[$rsync_i]}"
