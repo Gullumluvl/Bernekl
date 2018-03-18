@@ -90,8 +90,11 @@ rsync_remotes=()
 dircount=0
 while read -a line; do
     if [[ ! "${line[0]}" =~ ^# ]]; then
-        git_synced_dirs+=("${line[0]/+(\~|\$HOME)/$HOME}")
-        git_dir_desc+=("${line[1]}")
+        dir=("${line[0]/+(\~|\$HOME)/$HOME}")
+        dir=${dir%%/}
+        git_synced_dirs+=("$dir")
+        dirbasename=${dir##*/}
+        git_dir_desc+=("${line[1]-$dirbasename}")
         rsync_remotes+=("${line[2]:-}")
         if [[ ${#line[@]} -ge 3 ]] && [[ ! "${line[2]}" =~ ^# ]]; then
             rsync_synced+=($dircount)
