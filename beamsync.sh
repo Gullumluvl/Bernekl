@@ -40,68 +40,47 @@ BGREY="\e[01;30m"
 ITAL="\e[00;03m"
 currdir="$(pwd)"
 
-#currdirbase="$(basename $currdir)"
-#if [[ "$currdirbase" != "phd_notes" ]]; then
-#    echo "This script must be run from the 'phd_notes' directory." >&2
-#    exit 1
-#fi
-
-#git_dir_desc=("home dotfiles"
-#              #"my bin tools"
-#              "SVGGuru"
-#              "beamer theme"
-#              "latex-biota"
-#              "phd_notes")
-#
-#host=$(hostname)
 ##host_md5sum=$(hostname | md5sum | cut -f1)
 #
-#case "$host" in
-#   Tuatara)
-#        git_synced_dirs=("$HOME"
-#                         #"$HOME/mydvpt/mytools"
-#                         "$HOME/programTestingArea/SVGGuru"
-#                         "$HOME/texmf/tex/latex/beamer/themes"
-#                         "$HOME/mydvpt/latex-biota"
-#                         "$HOME/Documents/biologie/these/phd_notes");;
-#    ldog27|ldog31)
-#        git_synced_dirs=("$HOME"
-#                         "$HOME/mydvpt/mytools"
-#                         "$HOME/mydvpt/SVGGuru"
-#                         "$HOME/texmf/tex/latex/beamer/beamerthemes"
-#                         "$HOME/mydvpt/latex-biota"
-#                         "$HOME/Documents/these/phd_notes");;
-#esac
-#
-#[[ "${#git_dir_desc[@]}" -ne "${#git_synced_dirs[@]}" ]] && \
-#    echo "Description and directory lists don't match">&2 && exit 1
-#
-#rsync_synced=-1
-##rsync_synced="$HOME/Documents/these/phd_notes"
-
 listfile="$HOME/beamsync.list"
 [[ ! -f "$listfile" ]] && echo "File $listfile not found." >&2 && exit 1
 
 git_synced_dirs=()
 git_dir_desc=()
-rsync_synced=()
+#rsync_synced=()
 rsync_remotes=()
 
 dircount=0
 while read -a line; do
-    if [[ ! "${line[0]}" =~ ^# ]]; then
-        dir=("${line[0]/+(\~|\$HOME)/$HOME}")
-        dir=${dir%%/}
+    if [[ ${#line[@]} -gt 0 ]] && [[ ! "${line[0]}" =~ ^# ]]; then
+        dir=${line[0]/@(\~|\$HOME)/$HOME}
+        dir=${dir%%+( )} # strip trailing spaces
+        dir=${dir%/}
         git_synced_dirs+=("$dir")
         dirbasename=${dir##*/}
-        git_dir_desc+=("${line[1]-$dirbasename}")
-        rsync_remotes+=("${line[2]:-}")
+        desc=${line[1]-$dirbasename}
+        git_dir_desc+=("${desc%%+( )}")
         if [[ ${#line[@]} -ge 3 ]] && [[ ! "${line[2]}" =~ ^# ]]; then
-            rsync_synced+=($dircount)
+            rsync_r="${line[2]/@(\~|\$HOME)/$HOME}"
+            rsync_remotes[$dircount]="$rsync_r"
+            #rsync_synced+=($dircount)
         fi
+        #rsync_remotes+=("")
         ((++dircount))
+        #echo "READ: ${line[@]}"
     fi
 done < "$listfile"
+
+#echo -e "$dircount\t${#git_synced_dirs[@]}\t${#git_dir_desc[@]}\t${#rsync_remotes[@]}"
+#for dc in $(seq 0 $dircount);do
+#    echo -ne "${git_synced_dirs[$dc]}\t"
+#    echo -ne "${git_dir_desc[$dc]}\t"
+#    echo "${rsync_remotes[$dc]-}"
+#done
+
+[[ "${#git_dir_desc[@]}" -ne "${#git_synced_dirs[@]}" ]] && \
+    echo "Description and directory lists don't match">&2 && exit 1
+
 
 # Check that no git repository contains uncommitted change
 not_clean=()
@@ -113,6 +92,7 @@ counta=0
 echo -e "${BGREY}# Git${RESET}"
 
 for git_synced_dir in ${git_synced_dirs[@]}; do
+    #echo -n "$git_synced_dir   "
     cd "$git_synced_dir"
     notready=0
     if ! git diff-index --quiet HEAD --; then
@@ -142,17 +122,11 @@ done
 cd "$currdir"
 
 if [ -z "$updown" ]; then
-    for rsync_i in ${rsync_synced[@]}; do
+    for rsync_i in ${!rsync_remotes[@]}; do
     
         cd "${git_synced_dirs[$rsync_i]}"
         rsync_desc="${git_dir_desc[$rsync_i]}"
         remote="${rsync_remotes[$rsync_i]}"
-
-        #if [[ "$host" = "ldog27" ]]; then
-        #    remote="$HOME/ws2/mygitdata/phd_notes"
-        #else
-        #    remote="dyojord:ws2/mygitdata/phd_notes"
-        #fi
 
         echo -e "\n${BGREY}# Git data${RESET}\n${ITAL}$rsync_desc data${RESET}"
 
@@ -226,7 +200,7 @@ done
 
 # Git data
 echo -e "\n${BGREY}# Git Data${RESET}"
-for rsync_i in ${rsync_synced[@]}; do
+for rsync_i in ${!rsync_remotes[@]}; do
     cd "${git_synced_dirs[$rsync_i]}"
     rsync_desc="${git_dir_desc[$rsync_i]}"
     remote="${rsync_remotes[$rsync_i]}"
