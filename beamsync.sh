@@ -21,7 +21,6 @@ path	description	rsync remote repository
 
 # synchronize up or down?
 updown="${1:-}"
-echo $updown
 
 # Check args
 [[ $# -gt 1 ]]         && echo "$help" >&2 && exit 1
