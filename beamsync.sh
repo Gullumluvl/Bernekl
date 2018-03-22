@@ -131,9 +131,9 @@ if [ -z "$updown" ]; then
 
         set +e
         echo -n "Down:"
-        rsync -aruOh -n --stats --files-from="gitdata.index" "$remote/" ./ | head -5
+        rsync -aruOh -n --stats --ignore-missing-args --files-from="gitdata.index" "$remote/" ./ | head -5
         echo -n "Up:" 
-        rsync -aruOh -n --stats --files-from="gitdata.index" ./ "$remote/" | head -5
+        rsync -aruOh -n --stats --ignore-missing-args --files-from="gitdata.index" ./ "$remote/" | head -5
         #echo "Return code $?"
         set -e
     done
