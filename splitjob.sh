@@ -130,7 +130,7 @@ clean_exit() {
         rm -v ${output}-+([0-9]) || :
     done
 
-    exit $last_exit
+    echo "Last return code: $last_exit. Exit." >&2
 }
 
 ((dryrun)) || trap clean_exit ERR SIGINT SIGTERM EXIT
@@ -205,16 +205,20 @@ echo "allpids: (${allpids[@]:-})" >&2
 waitreturns=()
 
 set +e
+trap - ERR SIGINT SIGTERM EXIT
 for ipid in ${!allpids[@]}; do
     wait ${allpids[$ipid]}
     waitreturn=$?
     (( waitreturn == 127 )) && echo "NO BACKGROUND PROCESSES FOUND!">&2 && exit 127
     if ((waitreturn != 0 )); then
-        echo "Part $ipid failed ($waitreturn)!">&2
+        echo "Part $ipid failed ($waitreturn)!" >&2
     fi
     waitreturns+=($waitreturn)
 done
 set -e
+trap clean_exit ERR SIGINT SIGTERM EXIT
+
+echo "Gathering output files" >&2
 
 for output in ${outputs[@]:-}; do
     if (( oheader )); then
