@@ -33,7 +33,7 @@ for ext in "mkd" "md" "markdown" "txt"; do
             -c css/buttondown.css \
             --lua-filter=task-list.lua \
             --standalone \
-            ${options[@]} \
+            ${options[@]:-} \
             -o "$destfile" "$basefilename.$ext"
         done=1
         break
