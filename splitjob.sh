@@ -105,6 +105,8 @@ done
 maxpart=$(( ${#nparts} - 1 ))
 sufflen="${#maxpart}"
 
+# TODO: Simply force sufflen=2 and do not allow more than 100 parts...
+
 #sufflen="${#nparts}"
 #if [[ "$sufflen" =~ ^10+$ ]]; then
 #    (( --sufflen )) || echo "suffixe length can't be zero">&2 && exit 1
@@ -218,7 +220,7 @@ done
 set -e
 trap clean_exit ERR SIGINT SIGTERM EXIT
 
-echo "Gathering output files" >&2
+echo "Merging output files" >&2
 
 for output in ${outputs[@]:-}; do
     if (( oheader )); then
@@ -226,6 +228,7 @@ for output in ${outputs[@]:-}; do
         head -n $oheader ${output}-+(0) > $output
         sed -s "1,${oheader}d" ${output}-+([0-9]) >> $output
         #awk "FNR > $oheader" ${output}-+([0-9]) >> $output
+        #TODO: do not merge failed jobs!
     else
         cat ${output}-+([0-9]) > $output
     fi
