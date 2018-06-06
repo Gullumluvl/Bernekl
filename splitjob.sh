@@ -19,6 +19,8 @@ ${0##*/} [-h] [-n]
  -I number of header lines in input
  -O number of header lines in output
  -H number of header lines in input and output
+ -e name of the file to collect stderr
+ -s name of the file to collect stdout
 
 command formatting:
 Using printf format (%s to format string).
@@ -37,8 +39,10 @@ all=()
 iheader=0
 oheader=0
 dryrun=0
+stderrfile=""
+stdoutfile=""
 
-while getopts "hnp:i:o:I:O:H:" opt; do
+while getopts "hnp:i:o:I:O:H:e:s:" opt; do
     #echo $OPTIND
     case $opt in
         h)
@@ -65,6 +69,10 @@ while getopts "hnp:i:o:I:O:H:" opt; do
             outputs+=("$OPTARG")
             all+=("$OPTARG")
             ;;
+        e)
+            stderrfile="$OPTARG" ;;
+        s)
+            stdoutfile="$OPTARG" ;;
         #*)
         #    echo "Invalid option -$opt" >&2
         #    exit 1
@@ -95,6 +103,16 @@ elif [[ "$Nformats" -gt "${#all[@]}" ]]; then
     exit 1
 fi
 
+if [[ -n "$stdoutfile" ]]; then
+    all+=("$stdoutfile")
+    command+=" >%s"
+fi
+if [[ -n "$stderrfile" ]]; then
+    all+=("$stderrfile")
+    command+=" 2>%s"
+fi
+
+
 for optval in "$nparts" "$iheader" "$oheader"; do
     # Check integer options
     [[ ! "$optval" =~ ^[0-9]+$ ]] && echo "Integer required">&2 && exit 1
@@ -119,6 +137,8 @@ echo "- DEBUG:
     - I:       $iheader
     - O:       $oheader
     - sufflen: $sufflen
+    - stderrfile: $stderrfile
+    - stdoutfile: $stdoutfile
     - command:     '$command'"
 
 # Cleanup temporary files in case of error
