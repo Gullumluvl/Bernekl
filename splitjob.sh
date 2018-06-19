@@ -9,6 +9,7 @@ ${0##*/} [-h] [-n]
           -p <N>
           -i <input file> [-i ...] -o <output file> [-o ...]
           -I <N> -O <N> | -H <N>
+          -e <stderr file> -s <stdout file>
           <command>
 
  -h help
