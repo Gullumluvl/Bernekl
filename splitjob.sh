@@ -242,6 +242,7 @@ trap clean_exit ERR SIGINT SIGTERM EXIT
 
 echo "Merging output files" >&2
 
+
 for output in ${outputs[@]:-}; do
     if (( oheader )); then
         #sed -s '$R'
@@ -253,6 +254,15 @@ for output in ${outputs[@]:-}; do
         cat ${output}-+([0-9]) > $output
     fi
 done
+if [[ -n "$stderrfile" ]]; then
+    cat ${stderrfile}-+([0-9]) > $stderrfile
+    outputs+=("$stderrfile")
+fi
+if [[ -n "$stdoutfile" ]]; then
+    cat ${stdoutfile}-+([0-9]) > $stdoutfile
+    outputs+=("$stdoutfile")
+fi
+
 
 trap - ERR SIGINT SIGTERM EXIT
 
