@@ -21,6 +21,7 @@ options+=($@)
 ### Infer input file and convert
 
 basefilename="${destfile%.*}"
+
 # pandoc version > 2.0:
 # extension "smart" and "fenced_code_attributes" enabled by default.
 
@@ -28,6 +29,10 @@ done=0
 
 for ext in "mkd" "md" "markdown" "txt"; do
     if [ -f "$basefilename.$ext" ]; then
+        if [ "$destfile" = "$basefilename.$ext" ]; then
+            echo "Destination file equals the source file: $destfile. Aborting." >&2
+            exit 1
+        fi
         pandoc \
             --from=markdown \
             -c css/buttondown.css \
