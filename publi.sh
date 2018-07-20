@@ -39,8 +39,9 @@ for ext in "mkd" "md" "markdown" "txt"; do
             --filter=pandoc-expandpaths.py \
             --lua-filter=task-list.lua \
             --standalone \
+            --mathjax
             ${options[@]:-} \
-            -o "$destfile" "$basefilename.$ext"
+            -o "$destfile" -- "$basefilename.$ext"
         done=1
         break
     fi
