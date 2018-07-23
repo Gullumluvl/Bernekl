@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+
+"""
+Display a string from standard input or file with escaped characters NOT interpreted
+(explicitly printed with the backslashes).
+
+Well... there is another way:
+in .bash_aliases:
+    alias sedesc="sed -n l"
+    or
+    alias sedesc="sed -n l0" to set width to unlimited (avoid printing line continuation character)
+"""
+
+import fileinput
+
+for line in fileinput.input():
+    r = repr(line)[1:-1]
+    #TODO: colorize backslaches too, to avoid colorizing escaped characters
+    #      like escaped \t or \n (written as \\t or \\n)
+    r = r.replace(r'\\',  '\033[0;36m\\\033[0m')  # white backslash
+    r = r.replace(r'\t', '\033[0;33m\\t\033[0m') # yellow tab
+    r = r.replace(r'\n', '\033[1;30m\\n\033[0m') # darkgrey newline
+    r = r.replace(r'\r', '\033[1;37m\\r\033[0m') # grey carriage return
+    r = r.replace(r' ', '\033[0;30m\u00B7\033[0m') # darkgrey middle point
+    print(r)
