@@ -35,7 +35,7 @@ for ext in "mkd" "md" "markdown" "txt"; do
         fi
         pandoc \
             --from=markdown \
-            -c css/buttondown.css \
+            -c $HOME/.pandoc/styles/buttondown.css \
             --filter=pandoc-expandpaths.py \
             --lua-filter=task-list.lua \
             --standalone \
