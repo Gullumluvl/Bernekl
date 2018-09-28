@@ -105,10 +105,18 @@ elif [[ "$Nformats" -gt "${#all[@]}" ]]; then
 fi
 
 if [[ -n "$stdoutfile" ]]; then
+    if [[ ! -d "${stdoutfile%/*}" ]]; then
+        echo "Directory for stdoutfile does not exist.">&2
+        exit 1
+    fi
     all+=("$stdoutfile")
     command+=" >%s"
 fi
 if [[ -n "$stderrfile" ]]; then
+    if [[ ! -d "${stderrfile%/*}" ]]; then
+        echo "Directory for stderrfile does not exist.">&2
+        exit 1
+    fi
     all+=("$stderrfile")
     command+=" 2>%s"
 fi
