@@ -3,7 +3,7 @@
 printprogress=`basename "$0"`
 
 help="USAGE:
-    $printprogress <command> <args> [<args>]
+    $printprogress <command> [<args>]
 
 ARGUMENTS:
 
@@ -12,11 +12,16 @@ ARGUMENTS:
                '{.}' will be replaced by each argument (without its extension)
     <args>: either one double-quoted string, then newlines separate each argument;
             or a list of unquoted args, then any whitespace separate arguments.
+            If none, read from standard input (one argument per line).
 
 EXAMPLES:
     $printprogress 'echo {}' *.txt
 
     $printprogress 'echo {}' "'"'"\$(grep -v '^#' file.csv)"'"'"
+
+    $printprogress 'echo {}' <file.csv
+
+    grep -v '^#' file.csv | $printprogress 'echo {}'
 "
 
 # unofficial bash strict mode
@@ -43,14 +48,23 @@ trap my_err ERR
 
 action=${1:-}
 shift
-[[ -n "$action" && -n "$@" ]]
+[[ -n "$action" ]]
+
+arglist=()
+
+if [[ -z "$@" ]]; then
+# If no arguments, read from standard input
+    while IFS= read -r -d$'\n'; do
+        arglist+=( "$REPLY" )
+    done
+else
+    arglist=( $@ )
+fi
+total="${#arglist[@]}"
 
 my_err() {
-	echo -ne "\nError during execution." >&2
+	echo -ne "\nError during execution.\n" >&2
 }
-
-arglist=( $@ )
-total="${#arglist[@]}"
 
 #if [[ $total -eq 1 ]]; then
 #	IFS=$' \t\n'
@@ -60,6 +74,7 @@ total="${#arglist[@]}"
 #fi
 #echo $total
 #exit
+
 
 set +e
 count=0
