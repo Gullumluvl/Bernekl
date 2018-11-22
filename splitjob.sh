@@ -4,7 +4,13 @@ set -euo pipefail
 IFS=$'\t\n'
 shopt -s extglob
 
-help="USAGE
+help="DESCRIPTION
+
+Automatic command line parallelization:
+take a command line, input and output file arguments, split them into
+smaller parts, run them in parallel, and join the outputs.
+
+USAGE
 ${0##*/} [-h] [-n]
           -p <N>
           -i <input file> [-i ...] -o <output file> [-o ...]
@@ -22,6 +28,7 @@ ${0##*/} [-h] [-n]
  -H number of header lines in input and output
  -e name of the file to collect stderr
  -s name of the file to collect stdout
+ -S number of header lines in standard output.
 
 command formatting:
 Using printf format (%s to format string).
@@ -39,11 +46,12 @@ outputs=()
 all=()
 iheader=0
 oheader=0
+sheader=0
 dryrun=0
 stderrfile=""
 stdoutfile=""
 
-while getopts "hnp:i:o:I:O:H:e:s:" opt; do
+while getopts "hnp:i:o:I:O:H:e:s:S:" opt; do
     #echo $OPTIND
     case $opt in
         h)
@@ -74,6 +82,8 @@ while getopts "hnp:i:o:I:O:H:e:s:" opt; do
             stderrfile="$OPTARG" ;;
         s)
             stdoutfile="$OPTARG" ;;
+        S)
+            sheader=$OPTARG ;;
         #*)
         #    echo "Invalid option -$opt" >&2
         #    exit 1
@@ -122,7 +132,7 @@ if [[ -n "$stderrfile" ]]; then
 fi
 
 
-for optval in "$nparts" "$iheader" "$oheader"; do
+for optval in "$nparts" "$iheader" "$oheader" "$sheader"; do
     # Check integer options
     [[ ! "$optval" =~ ^[0-9]+$ ]] && echo "Integer required">&2 && exit 1
     # TODO: do not allow zero value
@@ -145,6 +155,7 @@ echo "- DEBUG:
     - outputs: (${outputs[*]:-})
     - I:       $iheader
     - O:       $oheader
+    - S:       $sheader
     - sufflen: $sufflen
     - stderrfile: $stderrfile
     - stdoutfile: $stdoutfile
@@ -252,23 +263,30 @@ trap clean_exit ERR SIGINT SIGTERM EXIT
 echo "Merging output files" >&2
 
 
-for output in ${outputs[@]:-}; do
-    if (( oheader )); then
-        #sed -s '$R'
-        head -n $oheader ${output}-+(0) > $output
-        sed -s "1,${oheader}d" ${output}-+([0-9]) >> $output
-        #awk "FNR > $oheader" ${output}-+([0-9]) >> $output
-        #TODO: do not merge failed jobs!
+merge_output_with_header() {
+    local nheader=$1
+    local output=$2
+    if (( nheader )); then
+        head -n $nheader ${output}-+(0) > $output
+        sed -s "1,${nheader}d" ${output}-+([0-9]) >> $output
     else
         cat ${output}-+([0-9]) > $output
     fi
+}
+
+
+for output in ${outputs[@]:-}; do
+    merge_output_with_header $oheader "$output"
 done
+
 if [[ -n "$stderrfile" ]]; then
     cat ${stderrfile}-+([0-9]) > $stderrfile
+    # For the clean exit:
     outputs+=("$stderrfile")
 fi
 if [[ -n "$stdoutfile" ]]; then
-    cat ${stdoutfile}-+([0-9]) > $stdoutfile
+    merge_output_with_header $sheader "$stdoutfile"
+    # For the clean exit:
     outputs+=("$stdoutfile")
 fi
 
