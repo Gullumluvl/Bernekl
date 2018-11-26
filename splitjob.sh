@@ -29,6 +29,8 @@ ${0##*/} [-h] [-n]
  -e name of the file to collect stderr
  -s name of the file to collect stdout
  -S number of header lines in standard output.
+ -N nice level (0-19) NOT implemented
+ -D ionice level (0-7) NOT implemented
 
 command formatting:
 Using printf format (%s to format string).
@@ -50,8 +52,10 @@ sheader=0
 dryrun=0
 stderrfile=""
 stdoutfile=""
+nicelvl=0
+ionicelvl=0
 
-while getopts "hnp:i:o:I:O:H:e:s:S:" opt; do
+while getopts "hnp:i:o:I:O:H:e:s:S:N:D:" opt; do
     #echo $OPTIND
     case $opt in
         h)
@@ -84,6 +88,8 @@ while getopts "hnp:i:o:I:O:H:e:s:S:" opt; do
             stdoutfile="$OPTARG" ;;
         S)
             sheader=$OPTARG ;;
+        N)  nicelvl=$OPTARG ;;
+        D)  ionicelvl=$OPTARG ;;
         #*)
         #    echo "Invalid option -$opt" >&2
         #    exit 1
@@ -131,13 +137,20 @@ if [[ -n "$stderrfile" ]]; then
     command+=" 2>%s"
 fi
 
-
-for optval in "$nparts" "$iheader" "$oheader" "$sheader"; do
+for optval in "$nparts" "$iheader" "$oheader" "$sheader" "$ionicelvl" "$nicelvl"; do
     # Check integer options
     [[ ! "$optval" =~ ^[0-9]+$ ]] && echo "Integer required">&2 && exit 1
     # TODO: do not allow zero value
 done
 #echo ' - Checked integer options.'
+
+if (( $ionicelvl )); then
+    command="ionice -c2 -n$ionicelvl $command"
+fi
+if (( $nicelvl )); then
+    command="nice -$nicelvl $command"
+fi
+
 
 maxpart=$(( ${#nparts} - 1 ))
 sufflen="${#maxpart}"
@@ -149,7 +162,7 @@ sufflen="${#maxpart}"
 #    (( --sufflen )) || echo "suffixe length can't be zero">&2 && exit 1
 #fi
 
-echo "- DEBUG:
+echo "DEBUG:
     - nparts:  $nparts
     - inputs:  (${inputs[*]:-})
     - outputs: (${outputs[*]:-})
@@ -159,7 +172,7 @@ echo "- DEBUG:
     - sufflen: $sufflen
     - stderrfile: $stderrfile
     - stdoutfile: $stdoutfile
-    - command:     '$command'"
+    - command:     '$command'" >&2
 
 # Cleanup temporary files in case of error
 clean_exit() {
