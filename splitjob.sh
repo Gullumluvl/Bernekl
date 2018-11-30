@@ -28,9 +28,10 @@ ${0##*/} [-h] [-n]
  -H number of header lines in input and output
  -e name of the file to collect stderr
  -s name of the file to collect stdout
- -S number of header lines in standard output.
- -N nice level (0-19) NOT implemented
- -D ionice level (0-7) NOT implemented
+ -S number of header lines in standard output
+ -N nice level (0-19)
+ -D ionice level (0-7)
+ -t separator pattern for the split command.
 
 command formatting:
 Using printf format (%s to format string).
@@ -54,8 +55,9 @@ stderrfile=""
 stdoutfile=""
 nicelvl=0
 ionicelvl=0
+sep=
 
-while getopts "hnp:i:o:I:O:H:e:s:S:N:D:" opt; do
+while getopts "hnp:i:o:I:O:H:e:s:S:N:D:t:" opt; do
     #echo $OPTIND
     case $opt in
         h)
@@ -88,8 +90,12 @@ while getopts "hnp:i:o:I:O:H:e:s:S:N:D:" opt; do
             stdoutfile="$OPTARG" ;;
         S)
             sheader=$OPTARG ;;
-        N)  nicelvl=$OPTARG ;;
-        D)  ionicelvl=$OPTARG ;;
+        N)
+            nicelvl=$OPTARG ;;
+        D)
+            ionicelvl=$OPTARG ;;
+        t)
+            sep=$OPTARG ;;
         #*)
         #    echo "Invalid option -$opt" >&2
         #    exit 1
@@ -178,44 +184,172 @@ echo "DEBUG:
 clean_exit() {
     last_exit=$?
     echo "Cleaning Temporary files.">&2
-    for input in ${inputs[@]:-}; do
+    for input in ${tmpinputs[@]:-}; do
         rm -v ${input}-+([0-9]) || :
     done
-    for output in ${outputs[@]:-}; do
+    for output in ${tmpoutputs[@]:-}; do
         rm -v ${output}-+([0-9]) || :
     done
+    rmdir -v "$thistmpdir" || :
 
     echo "Last return code: $last_exit. Exit." >&2
 }
 
 ((dryrun)) || trap clean_exit ERR SIGINT SIGTERM EXIT
 
+# Setup filenames in temporary directory
+
+if [[ -n "${TMPDIR:-}" ]]; then
+    # Make tmp directory
+    if (( dryrun )); then
+        thistmpdir="$(mktemp --dry-run -d -t splitjob.XXXXXXXX)"
+    else
+        thistmpdir="$(mktemp -d -t splitjob.XXXXXXXX)"
+    fi
+
+    if [[ -n "$stdoutfile" ]]; then
+        tmpstdoutfile="$thistmpdir/${stdoutfile##*/}"
+    fi
+    if [[ -n "$stderrfile" ]]; then
+        tmpstderrfile="$thistmpdir/${stderrfile##*/}"
+    fi
+
+    # Replace dirname by the tmpdir, for all inputs at once.
+    #if (( ${#inputs[@]} )); then
+    #    # Does not work if there is no '/' in the file name.
+    #    tmpinputs=(${inputs[@]/#*\//$thistmpdir})
+    #fi
+    tmpinputs=()
+    for input in ${inputs[@]:-}; do
+        tmpinputs+=("$thistmpdir/${input##*/}")
+    done
+    #if (( ${#outputs[@]} )); then
+    #    tmpoutputs+=(${outputs[@]/#*\//$thistmpdir})
+    #fi
+    tmpoutputs=()
+    for output in ${outputs[@]:-}; do
+        tmpoutputs+=("$thistmpdir/${output##*/}")
+    done
+    # Create array $tmpall
+    #tmpall=(${any[@]/#*\//$thistmpdir})
+    tmpall=()
+    for any in ${all[@]:-}; do
+        tmpall+=("$thistmpdir/${any##*/}")
+    done
+
+    #echo ${tmpinputs[@]}
+    #echo ${tmpoutputs[@]}
+    #echo ${tmpall[@]}
+
+    # Check that there are no unwanted duplicate names.
+    Nall=$(printf '%s\n' "${all[@]:-}" | sort -u | wc -l)
+    Ntmpall=$(printf '%s\n' "${tmpall[@]:-}" | sort -u | wc -l)
+    (( Nall == Ntmpall ))
+else
+    tmpstdoutfile=$stdoutfile
+    tmpstderrfile=$stderrfile
+    tmpinputs=(${inputs[@]:-})
+    tmpoutputs=(${outputs[@]:-})
+    tmpall=(${all[@]:-})
+fi
+
+echo "    - tmpdir: ${thistmpdir:-}
+    - tmpinputs: ${tmpinputs[@]:-}
+    - tmpoutputs: ${tmpoutputs[@]:-}
+    - tmpstdoutfile: ${tmpstdoutfile}
+    - tmpstderrfile: ${tmpstderrfile}" >&2
+
 # Split input files
 
-#if (( ${#inputs} )); then
-for input in ${inputs[@]:-}; do
-    #lcount=$(wc -l "$input" | cut -d' ' -f1)
-    #((lcount -= iheader))
-    #lpart=$(( lcount / nparts ))
-    #(( lcount % nparts )) && (( lpart++ ))
-    if (( dryrun )); then
-        if (( iheader )); then
-            echo '$' tail -n +$((iheader+1)) "$input" \| split -d -a $sufflen -n "l/$nparts" - "${input}-"
+if [[ -n "$sep" ]]; then
+    split_cmd_base() {
+        local input=$1
+        local tmpinput=$2
+        local sufflen=$3
+        local nparts=$4
+        egrep -q -E "$sep" $input || {
+            echo "Pattern '$sep' not found in $input" >&2;
+            exit 1; }
+        !egrep -q -Pa '\x00' $input || {
+            echo "Nul characters already present in $input, can't use them as separator." >&2;
+            exit 1; }
+        if (( dryrun )); then
+            echo '$' 'sed "s/'$sep'/\x0\1/g" "'$input'" | split -t'"'"'\0'"'"' -d -a '$sufflen' -n "l/'$nparts'" - "'${tmpinput}'-"'
         else
-            echo '$' split -d -a $sufflen -n "l/$nparts" "$input" "${input}-"
+            #[[ -n "$(sed -n /$sep/pq $input)" ]] || {
+            sed -r "s/$sep/\x0\1/g" "$input" |\
+                split -t'\0' -d -a $sufflen -n "l/$nparts" - "${tmpinput}-"
         fi
-    else
-        split -d -a $sufflen -n "l/$nparts" "$input" "${input}-"
-        if (( iheader )); then
-            #tail -n +$((iheader+1)) "$input" | split -d -a $sufflen -n "l/$nparts" - "${input}-"
-            header="$(head -n $iheader $input)"
-            # Precede each newline by a backslash and insert header
-            # fails if no file
-            sed -i "1i ${header//$'\n'/\\$'\n'}" ${input}-*([0-9])[1-9] || \
+    }
+else
+    split_cmd_base() {
+        local input=$1
+        local tmpinput=$2
+        local sufflen=$3
+        local nparts=$4
+        if (( dryrun )); then
+            echo '$' 'split -d -a '$sufflen' -n "l/'$nparts'" "'${input}'" "'${tmpinput}'-"'
+        else
+            #[[ -n "$(sed -n /$sep/pq $input)" ]] || {
+            split -d -a $sufflen -n "l/$nparts" "${input}" "${tmpinput}-"
+        fi
+    }
+fi
+if (( iheader )); then
+    split_cmd() {
+        local input=$1
+        local tmpinput=$2
+        local header="$(head -n $iheader $input)"
+        split_cmd_base $@
+        # Precede each newline by a backslash and insert header (or printf '%q' ?)
+        # fails if no file
+        if (( dryrun )); then
+            echo '$' 'sed -i "1i '${header//$'\n'/\\$'\n'}'" '${tmpinput}'-*([0-9])[1-9]' #|| \
+                #{ echo "Can't insert header: no input parts available.">&2 ;
+                # exit 1; }
+        else
+            sed -i "1i ${header//$'\n'/\\$'\n'}" ${tmpinput}-*([0-9])[1-9] || \
                 { echo "Can't insert header: no input parts available.">&2 ;
                  exit 1; }
         fi
-    fi
+    }
+else
+    split_cmd() {
+        split_cmd_base $@
+    }
+fi
+
+#if (( ${#inputs} )); then
+#for input in ${inputs[@]:-}; do
+for i_input in ${!inputs[@]}; do
+    input=${inputs[$i_input]}
+    tmpinput=${tmpinputs[$i_input]}
+    ##lcount=$(wc -l "$input" | cut -d' ' -f1)
+    ##((lcount -= iheader))
+    ##lpart=$(( lcount / nparts ))
+    ##(( lcount % nparts )) && (( lpart++ ))
+    #if (( dryrun )); then
+    #    if (( iheader )); then
+    #        echo '$' tail -n +$((iheader+1)) "$input" \| split -d -a $sufflen -n "l/$nparts" - "${tmpinput}-"
+    #    else
+    #        echo '$' split -d -a $sufflen -n "l/$nparts" "$input" "${tmpinput}-"
+    #    fi
+    #else
+    #    if [[ -n "$sep" ]]; then
+    #        sed "s/$sep/\0\1/g" "$input" | split -t'\0' -d -a $sufflen -n "l/$nparts" - "${tmpinput}-"
+    #    fi
+    #    split -d -a $sufflen -n "l/$nparts" "$input" "${tmpinput}-"
+    #    if (( iheader )); then
+    #        #tail -n +$((iheader+1)) "$input" | split -d -a $sufflen -n "l/$nparts" - "${input}-"
+    #        header="$(head -n $iheader $input)"
+    #        # Precede each newline by a backslash and insert header
+    #        # fails if no file
+    #        sed -i "1i ${header//$'\n'/\\$'\n'}" ${tmpinput}-*([0-9])[1-9] || \
+    #            { echo "Can't insert header: no input parts available.">&2 ;
+    #             exit 1; }
+    #    fi
+    #fi
+    split_cmd "$input" "$tmpinput" "$sufflen" "$nparts"
 done
 #fi
 
@@ -238,8 +372,8 @@ for part in $allparts; do
     #printf "IFS=%q\n" "$IFS"
 
     # Append suffix to all filenames
-    if (( ${#all[@]} )); then
-        allpartfiles=(${all[*]/%/-$part})
+    if (( ${#tmpall[@]} )); then
+        allpartfiles=(${tmpall[*]/%/-$part})
     fi
     #echo "allpartfiles: ${allpartfiles[@]/#/>}"
     cmd=$( printf "$command" ${allpartfiles[@]:-} )
@@ -279,28 +413,32 @@ echo "Merging output files" >&2
 merge_output_with_header() {
     local nheader=$1
     local output=$2
+    local tmpoutput=${3:-$output}
     if (( nheader )); then
-        head -n $nheader ${output}-+(0) > $output
-        sed -s "1,${nheader}d" ${output}-+([0-9]) >> $output
+        head -n $nheader ${tmpoutput}-+(0) > $output
+        sed -s "1,${nheader}d" ${tmpoutput}-+([0-9]) >> $output
     else
-        cat ${output}-+([0-9]) > $output
+        cat ${tmpoutput}-+([0-9]) > $output
     fi
 }
 
 
-for output in ${outputs[@]:-}; do
-    merge_output_with_header $oheader "$output"
+#for output in ${outputs[@]:-}; do
+for i_output in ${!outputs[@]}; do
+    output=${outputs[$i_output]}
+    tmpoutput=${tmpoutputs[$i_output]}
+    merge_output_with_header $oheader "$output" "$tmpoutput"
 done
 
 if [[ -n "$stderrfile" ]]; then
-    cat ${stderrfile}-+([0-9]) > $stderrfile
+    cat ${tmpstderrfile}-+([0-9]) > $stderrfile
     # For the clean exit:
-    outputs+=("$stderrfile")
+    tmpoutputs+=("$tmpstderrfile")
 fi
 if [[ -n "$stdoutfile" ]]; then
-    merge_output_with_header $sheader "$stdoutfile"
+    merge_output_with_header $sheader "$stdoutfile" "$tmpstdoutfile"
     # For the clean exit:
-    outputs+=("$stdoutfile")
+    tmpoutputs+=("$tmpstdoutfile")
 fi
 
 
