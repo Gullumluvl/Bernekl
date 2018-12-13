@@ -9,22 +9,71 @@ help="USAGE: $0 [<u|up|d|down>] [-h]
 No argument:  print the state of the repositories;
        u/up:  upload (push);
      d/down:  download (pull);
-         -h:  show help.
-         
-Requires the file ~/beamsync.list.
+         -h:  show help;
+         -r:  specify a special remote to:
+              1. replace the \${remote} string in the list file;
+              2. choose as a remote with git.
+         -d:  print debugging messages;
+         -f:  use this config file instead of the default [~/beamsync.list].
+              (NOT IMPLEMENTED)
+
+Requires the file "'`'"~/beamsync.list"'`'".
+
 Formatted like: tab separated list of synchronized directories:
 Column 1	Column 2	(Column 3, optional)
-path	description	rsync remote repository
+path	description	rsync/git remote repository
 
 ~ or \$HOME is replaced by the \$HOME value.
+\$remote or \${remote} is replaced by the value of the -r option.
+
+If a line has 2 columns: assume it's a git command.
+If a line has a 3rd and 4th column:
+  - if the 3rd column is 'R', use the 4th one as a rsync remote.
+  - else give the remaining args to git push/pull.
+If there is only a 3rd column (potentially dangerous), try to guess:
+  - if it contains ':', use a rsync command.
+  (In summary, configure your git remotes with git-remote, and don't try to rsync
+  to a local directory without giving a 'R' column.)
+
+Comments are specified by:
+  - a '#' at the beginning of the line;
+  - a '#' after a tabulation.
+
+TODO: the first line is: remote=somename, use it as the default remote.
 "
+
+
+remote=
+debug=0
+listfile="$HOME/beamsync.list"
+
+while getopts "hr:df:" opt; do
+    #echo $OPTIND
+    case $opt in
+        h)
+            echo "$help"
+            exit 0
+            ;;
+        r)
+            remote=$OPTARG ;;
+        d)
+            debug=1 ;;
+        f)
+            listfile=$OPTARG ;;
+        #*)
+        #    echo "Invalid option -$opt" >&2
+        #    exit 1
+        #    ;;
+    esac
+done
+shift $((OPTIND-1))
 
 # synchronize up or down?
 updown="${1:-}"
 
 # Check args
 [[ $# -gt 1 ]]         && echo "$help" >&2 && exit 1
-[[ "$updown" = "-h" ]] && echo "$help" >&2 && exit 0
+#[[ "$updown" = "-h" ]] && echo "$help" >&2 && exit 0
 [[ -n "$updown" ]] && [[ ! "$updown" =~ ^(u|up|d|down)$ ]] && \
     echo "$help">&2 && exit 1
 
@@ -41,7 +90,6 @@ currdir="$(pwd)"
 
 ##host_md5sum=$(hostname | md5sum | cut -f1)
 #
-listfile="$HOME/beamsync.list"
 [[ ! -f "$listfile" ]] && echo "File $listfile not found." >&2 && exit 1
 
 git_synced_dirs=()
@@ -52,17 +100,44 @@ rsync_remotes=()
 dircount=0
 while read -a line; do
     if [[ ${#line[@]} -gt 0 ]] && [[ ! "${line[0]}" =~ ^# ]]; then
+        # Local directory
         dir=${line[0]/@(\~|\$HOME)/$HOME}
         dir=${dir%%+( )} # strip trailing spaces
         dir=${dir%/}
         git_synced_dirs+=("$dir")
         dirbasename=${dir##*/}
-        desc=${line[1]-$dirbasename}
+        desc=${line[1]-$dirbasename}  # Default if not specified.
         git_dir_desc+=("${desc%%+( )}")
-        if [[ ${#line[@]} -ge 3 ]] && [[ ! "${line[2]}" =~ ^# ]]; then
-            rsync_r="${line[2]/@(\~|\$HOME)/$HOME}"
-            rsync_remotes[$dircount]="$rsync_r"
-            #rsync_synced+=($dircount)
+        if [[ ${#line[@]} -eq 3 ]] && [[ ! "${line[2]}" =~ ^# ]] || \
+            [[ ${#line[@]} -gt 3 ]] && [[ "${line[3]}" =~ ^# ]]; then
+            # Replace the remote keyword by the given option.
+            [[ -n "${remote}" ]] || [[ ! ${line[2]} =~ ^\$remote|^\${remote} ]] || \
+                echo "ERROR: keyword remote but no option given." >&2 && \
+                exit 1
+            rsync_r="${line[2]/\$@(remote|{remote})/$remote}"
+
+            if [[ ${line[2]} =~ : ]]; then
+                rsync_remotes[$dircount]="$rsync_r"
+            elif [[  ]]; then
+                # THIS WILL BE A GIT COMMAND
+                git_remotes[$dircount]="$rsync_r"
+            fi
+        elif [[ ${#line[@]} -ge 4 ]]; then
+            [[ -n "${remote}" ]] || [[ ! ${line[3]} =~ ^\$remote|^\${remote} ]] || \
+                echo "ERROR: keyword remote but no option given." >&2 && \
+                exit 1
+            rsync_r="${line[3]/#\$@(remote|{remote})/$remote}"
+
+            if [[ ${line[2]} = 'R' ]]; then
+                rsync_r="${rsync_r/#@(\~|\$HOME)/$HOME}"  # substitute only at the beginning.
+                rsync_remotes[$dircount]="$rsync_r"
+                #rsync_synced+=($dircount)
+            elif [[ ${line[2]} = 'G' ]]; then
+                git_remotes[$dircount]="$rsync_r"
+            else
+                echo "ERROR: invalid value for 3rd column (l.$dircount): '${line[2]}'" >&2
+                exit 1
+            fi
         fi
         #rsync_remotes+=("")
         ((++dircount))
@@ -70,15 +145,17 @@ while read -a line; do
     fi
 done < "$listfile"
 
-#echo -e "$dircount\t${#git_synced_dirs[@]}\t${#git_dir_desc[@]}\t${#rsync_remotes[@]}"
-#for dc in $(seq 0 $dircount);do
-#    echo -ne "${git_synced_dirs[$dc]}\t"
-#    echo -ne "${git_dir_desc[$dc]}\t"
-#    echo "${rsync_remotes[$dc]-}"
-#done
+if (( debug )); then
+    echo -e "$dircount\t${#git_synced_dirs[@]}\t${#git_dir_desc[@]}\t${#rsync_remotes[@]}"
+    for dc in $(seq 0 $dircount);do
+        echo -ne "${git_synced_dirs[$dc]}\t"
+        echo -ne "${git_dir_desc[$dc]}\t"
+        echo "${rsync_remotes[$dc]-}"
+    done
+fi
 
 [[ "${#git_dir_desc[@]}" -ne "${#git_synced_dirs[@]}" ]] && \
-    echo "Description and directory lists don't match">&2 && exit 1
+    echo "ERROR: Description and directory lists don't match">&2 && exit 1
 
 
 # Check that no git repository contains uncommitted change
@@ -102,7 +179,7 @@ for git_synced_dir in ${git_synced_dirs[@]}; do
         echo -n "Clean      "
     fi
 
-    ahead_commits=$(git rev-list --oneline ^origin/master HEAD | wc -l)
+    ahead_commits=$(git rev-list --oneline ^${remote-origin}/master HEAD | wc -l)
     ahead_col=""
     if [[ ${ahead_commits} -gt 0 ]]; then
         ahead[((counta++))]="$git_synced_dir"
@@ -120,6 +197,7 @@ for git_synced_dir in ${git_synced_dirs[@]}; do
 done
 cd "$currdir"
 
+# Rsync dry-run. TODO: git dry-run.
 if [ -z "$updown" ]; then
     for rsync_i in ${!rsync_remotes[@]}; do
     
@@ -143,7 +221,7 @@ if [ -z "$updown" ]; then
 fi
 
 if [[ ${#not_clean[@]} -gt 0 ]]; then
-    echo "Working trees not clean, please commit your changes in:" >&2
+    echo "ERROR: Working trees not clean, please commit your changes in:" >&2
     for dir in ${not_clean[@]}; do
         echo "    ${dir}" >&2
     done
@@ -151,7 +229,7 @@ if [[ ${#not_clean[@]} -gt 0 ]]; then
 fi
 
 if [[ "$updown" =~ ^(d|down)$ ]] && [[ ${#ahead[@]} -gt 0 ]]; then
-    echo "Ahead commits should be pushed before pulling:" >&2
+    echo "ERROR: Ahead commits should be pushed before pulling:" >&2
     for dir in ${ahead[@]}; do
         echo "    ${dir}" >&2
     done
@@ -161,6 +239,8 @@ fi
 echo "############################"
 
 verbose_git_sync() {
+    # Take the index of the directory to sync.
+
     #echo "executing verbose_git_sync"
     if [[ $# -ne 1 ]]; then
         echo "Wrong nb of args in verbose_git_sync">&2 && return 1
@@ -174,13 +254,13 @@ verbose_git_sync() {
     echo -e "\n### Synchronizing ${ITAL}${git_dir_desc[$1]}${RESET} at ${synced_dir/$HOME/\~}"
 
     #git status -uno
-    ahead_commits=$(git rev-list --oneline ^origin/master HEAD | wc -l)
+    ahead_commits=$(git rev-list --oneline ^${remote-origin}/master HEAD | wc -l)
     if [[ "$updown" =~ ^(d|down)$ ]]; then
-        git pull
+        git pull ${remote}
     elif [[ "$ahead_commits" -eq 0 ]]; then
         echo "Nothing to push"
     else
-        git push
+        git push ${remote}
     fi
 
     cd "$currdir"
@@ -197,21 +277,21 @@ for i in ${!git_synced_dirs[@]}; do
     verbose_git_sync $i
 done
 
-# Git data
+# Git data (with rsync)
 echo -e "\n${BGREY}# Git Data${RESET}"
 for rsync_i in ${!rsync_remotes[@]}; do
     cd "${git_synced_dirs[$rsync_i]}"
     rsync_desc="${git_dir_desc[$rsync_i]}"
-    remote="${rsync_remotes[$rsync_i]}"
+    repo="${rsync_remotes[$rsync_i]}"
     echo -e "### Synchronizing ${ITAL}$rsync_desc data${RESET} (rsync)"
 
     set +e
     if [[ "$updown" =~ ^(d|down)$ ]]; then
         echo "Down:"
-        rsync -rauOvh --files-from="gitdata.index" "$remote/" ./
+        rsync -rauOvh --files-from="gitdata.index" "$repo/" ./
     else
         echo "Up:"
-        rsync -rauOvh --files-from="gitdata.index" ./ "$remote/"
+        rsync -rauOvh --files-from="gitdata.index" ./ "$repo/"
     fi
     rsync_return=$?
     set -e
