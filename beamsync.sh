@@ -267,7 +267,7 @@ verbose_git_sync() {
     echo -e "\n### Synchronizing ${ITAL}${dir_desc[$1]}${RESET} at ${synced_dir/$HOME/\~}"
 
     #git status -uno
-    ahead_commits=$(git rev-list --oneline ^${remote-origin}/master HEAD | wc -l)
+    ahead_commits=$(git rev-list --oneline ^${remote:-origin}/master HEAD | wc -l)
     if [[ "$updown" =~ ^(d|down)$ ]]; then
         git pull ${git_remote} ${git_branch}
     elif [[ "$ahead_commits" -eq 0 ]]; then
