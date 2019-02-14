@@ -258,7 +258,7 @@ verbose_git_sync() {
     fi
     
     synced_dir="${synced_dirs[$1]}"
-    git_remote=${git_remotes[$synced_i]-}
+    git_remote=${git_remotes[$1]-}
     git_branch=
     [[ -z "$git_remote" ]] || git_branch="master"
 
