@@ -42,6 +42,8 @@ Comments are specified by:
 TODO: the first line is: remote=somename, use it as the default remote.
 "
 
+set -o errtrace
+trap "echo $? l.$LINENO '$BASH_COMMAND':$BASH_LINENO" ERR
 
 remote=
 debug=0
@@ -92,10 +94,11 @@ currdir="$(pwd)"
 #
 [[ ! -f "$listfile" ]] && echo "File $listfile not found." >&2 && exit 1
 
-git_synced_dirs=()
-git_dir_desc=()
+synced_dirs=()
+dir_desc=()
 #rsync_synced=()
 rsync_remotes=()
+git_remotes=()
 
 dircount=0
 while read -a line; do
@@ -104,29 +107,31 @@ while read -a line; do
         dir=${line[0]/@(\~|\$HOME)/$HOME}
         dir=${dir%%+( )} # strip trailing spaces
         dir=${dir%/}
-        git_synced_dirs+=("$dir")
+        synced_dirs+=("$dir")
         dirbasename=${dir##*/}
         desc=${line[1]-$dirbasename}  # Default if not specified.
-        git_dir_desc+=("${desc%%+( )}")
+        dir_desc+=("${desc%%+( )}")
         if [[ ${#line[@]} -eq 3 ]] && [[ ! "${line[2]}" =~ ^# ]] || \
             [[ ${#line[@]} -gt 3 ]] && [[ "${line[3]}" =~ ^# ]]; then
             # Replace the remote keyword by the given option.
-            [[ -n "${remote}" ]] || [[ ! ${line[2]} =~ ^\$remote|^\${remote} ]] || \
-                echo "ERROR: keyword remote but no option given." >&2 && \
+            if [[ -z "${remote}" ]] && [[ ${line[2]} =~ ^\$remote|^\${remote} ]]; then
+                echo "ERROR: keyword remote but no option given." >&2
                 exit 1
+            fi
             rsync_r="${line[2]/\$@(remote|{remote})/$remote}"
 
             if [[ ${line[2]} =~ : ]]; then
                 rsync_remotes[$dircount]="$rsync_r"
-            elif [[  ]]; then
+            else #if [[  ]]; then
                 # THIS WILL BE A GIT COMMAND
                 git_remotes[$dircount]="$rsync_r"
             fi
         elif [[ ${#line[@]} -ge 4 ]]; then
-            [[ -n "${remote}" ]] || [[ ! ${line[3]} =~ ^\$remote|^\${remote} ]] || \
-                echo "ERROR: keyword remote but no option given." >&2 && \
+            if [[ -z "${remote}" ]] && [[ ${line[3]} =~ ^\$remote|^\${remote} ]]; then
+                echo "ERROR: keyword remote but no option given." >&2
                 exit 1
-            rsync_r="${line[3]/#\$@(remote|{remote})/$remote}"
+            fi
+            rsync_r="${line[3]/#\$@(remote|\{remote\})/$remote}"
 
             if [[ ${line[2]} = 'R' ]]; then
                 rsync_r="${rsync_r/#@(\~|\$HOME)/$HOME}"  # substitute only at the beginning.
@@ -146,15 +151,15 @@ while read -a line; do
 done < "$listfile"
 
 if (( debug )); then
-    echo -e "$dircount\t${#git_synced_dirs[@]}\t${#git_dir_desc[@]}\t${#rsync_remotes[@]}"
-    for dc in $(seq 0 $dircount);do
-        echo -ne "${git_synced_dirs[$dc]}\t"
-        echo -ne "${git_dir_desc[$dc]}\t"
-        echo "${rsync_remotes[$dc]-}"
+    echo -e "$dircount\t${#synced_dirs[@]}\t${#dir_desc[@]}\t${#rsync_remotes[@]}\t${#git_remotes[@]}"
+    for dc in ${!synced_dirs[@]}; do
+        echo -ne "${synced_dirs[$dc]}\t"
+        echo -ne "${dir_desc[$dc]}\t"
+        echo "${rsync_remotes[$dc]-}${git_remotes[$dc]-}"
     done
 fi
 
-[[ "${#git_dir_desc[@]}" -ne "${#git_synced_dirs[@]}" ]] && \
+[[ "${#dir_desc[@]}" -ne "${#synced_dirs[@]}" ]] && \
     echo "ERROR: Description and directory lists don't match">&2 && exit 1
 
 
@@ -167,22 +172,25 @@ counta=0
 
 echo -e "${BGREY}# Git${RESET}"
 
-for git_synced_dir in ${git_synced_dirs[@]}; do
-    #echo -n "$git_synced_dir   "
-    cd "$git_synced_dir"
+#for synced_i in ${!synced_dirs[@]}; do
+#    synced_dir=${synced_dirs[$synced_i]}
+#    git_remote=${git_remotes[$synced_i]-}
+for synced_dir in ${synced_dirs[@]}; do
+    #echo -n "$synced_dir   "
+    cd "$synced_dir"
     notready=0
     if ! git diff-index --quiet HEAD --; then
         echo -en "${RED}NOT clean${RESET}  " # In red color.
-        not_clean[((countn++))]="$git_synced_dir"
+        not_clean[((countn++))]="$synced_dir"
         ((++notready))
     else
         echo -n "Clean      "
     fi
 
-    ahead_commits=$(git rev-list --oneline ^${remote-origin}/master HEAD | wc -l)
+    ahead_commits=$(git rev-list --oneline ^${remote:-origin}/master HEAD | wc -l)
     ahead_col=""
     if [[ ${ahead_commits} -gt 0 ]]; then
-        ahead[((counta++))]="$git_synced_dir"
+        ahead[((counta++))]="$synced_dir"
         ahead_col=$CYAN
         ((notready+=2))
     fi
@@ -193,17 +201,18 @@ for git_synced_dir in ${git_synced_dirs[@]}; do
         2) echo -ne $CYAN ;;
         3) echo -ne $PURPL ;;
     esac
-    echo -e "${git_synced_dir/$HOME/\~}$RESET"
+    echo -e "${synced_dir/$HOME/\~}$RESET"
 done
 cd "$currdir"
 
 # Rsync dry-run. TODO: git dry-run.
 if [ -z "$updown" ]; then
+    # Iterate over all indices where an element was filled.
     for rsync_i in ${!rsync_remotes[@]}; do
     
-        cd "${git_synced_dirs[$rsync_i]}"
-        rsync_desc="${git_dir_desc[$rsync_i]}"
-        remote="${rsync_remotes[$rsync_i]}"
+        cd "${synced_dirs[$rsync_i]}"
+        rsync_desc="${dir_desc[$rsync_i]}"
+        remote="${rsync_remotes[$rsync_i]}"  # Not allowed to be undefined.
 
         echo -e "\n${BGREY}# Git data${RESET}\n${ITAL}$rsync_desc data${RESET}"
 
@@ -248,19 +257,23 @@ verbose_git_sync() {
         echo "Argument of verbose_git_sync must be an integer">&2 && return 1
     fi
     
-    synced_dir="${git_synced_dirs[$1]}"
+    synced_dir="${synced_dirs[$1]}"
+    git_remote=${git_remotes[$synced_i]-}
+    git_branch=
+    [[ -z "$git_remote" ]] || git_branch="master"
+
     cd "$synced_dir" #&& echo "moved to dir $synced_dir">&2 echo "failed to move"
     
-    echo -e "\n### Synchronizing ${ITAL}${git_dir_desc[$1]}${RESET} at ${synced_dir/$HOME/\~}"
+    echo -e "\n### Synchronizing ${ITAL}${dir_desc[$1]}${RESET} at ${synced_dir/$HOME/\~}"
 
     #git status -uno
     ahead_commits=$(git rev-list --oneline ^${remote-origin}/master HEAD | wc -l)
     if [[ "$updown" =~ ^(d|down)$ ]]; then
-        git pull ${remote}
+        git pull ${git_remote} ${git_branch}
     elif [[ "$ahead_commits" -eq 0 ]]; then
         echo "Nothing to push"
     else
-        git push ${remote}
+        git push ${git_remote} ${git_branch}
     fi
 
     cd "$currdir"
@@ -273,15 +286,16 @@ verbose_git_sync() {
 # Git
 
 # Enumerate indices
-for i in ${!git_synced_dirs[@]}; do
+###TODO: Ignore synced_dirs that are **only rsync** synchronized.
+for i in ${!synced_dirs[@]}; do
     verbose_git_sync $i
 done
 
 # Git data (with rsync)
 echo -e "\n${BGREY}# Git Data${RESET}"
 for rsync_i in ${!rsync_remotes[@]}; do
-    cd "${git_synced_dirs[$rsync_i]}"
-    rsync_desc="${git_dir_desc[$rsync_i]}"
+    cd "${synced_dirs[$rsync_i]}"
+    rsync_desc="${dir_desc[$rsync_i]}"
     repo="${rsync_remotes[$rsync_i]}"
     echo -e "### Synchronizing ${ITAL}$rsync_desc data${RESET} (rsync)"
 
