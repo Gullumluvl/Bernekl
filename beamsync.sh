@@ -111,14 +111,14 @@ while read -a line; do
         dirbasename=${dir##*/}
         desc=${line[1]-$dirbasename}  # Default if not specified.
         dir_desc+=("${desc%%+( )}")
-        if [[ ${#line[@]} -eq 3 ]] && [[ ! "${line[2]}" =~ ^# ]] || \
-            [[ ${#line[@]} -gt 3 ]] && [[ "${line[3]}" =~ ^# ]]; then
+        if [[ ${#line[@]} -eq 3  &&  ! "${line[2]}" =~ ^# ]] || \
+            [[ ${#line[@]} -gt 3  &&  "${line[3]}" =~ ^# ]]; then
             # Replace the remote keyword by the given option.
             if [[ -z "${remote}" ]] && [[ ${line[2]} =~ ^\$remote|^\${remote} ]]; then
                 echo "ERROR: keyword remote but no option given." >&2
                 exit 1
             fi
-            rsync_r="${line[2]/\$@(remote|{remote})/$remote}"
+            rsync_r="${line[2]/\$@(remote|\{remote\})/$remote}"
 
             if [[ ${line[2]} =~ : ]]; then
                 rsync_remotes[$dircount]="$rsync_r"
@@ -218,9 +218,9 @@ if [ -z "$updown" ]; then
 
         set +e
         echo -n "Down:"
-        rsync -aruOh -n --stats --ignore-missing-args --files-from="gitdata.index" "$remote/" ./ | head -5
+        rsync -e ssh -aruOh -n --stats --ignore-missing-args --files-from="gitdata.index" "$remote/" ./ | head -5
         echo -n "Up:" 
-        rsync -aruOh -n --stats --ignore-missing-args --files-from="gitdata.index" ./ "$remote/" | head -5
+        rsync -e ssh -aruOh -n --stats --ignore-missing-args --files-from="gitdata.index" ./ "$remote/" | head -5
         #echo "Return code $?"
         set -e
     done

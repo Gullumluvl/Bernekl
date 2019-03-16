@@ -126,7 +126,7 @@ findsame() {
                 other_ext+=(${same##*.})
             fi
         done
-        echo -e "$col${other_ext[@]:-}$RESET"
+        echo -e "${col:-}${other_ext[@]:-}$RESET"
     done
 }
 
