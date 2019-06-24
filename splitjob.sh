@@ -29,8 +29,8 @@ ${0##*/} [-h] [-n]
  -e name of the file to collect stderr
  -s name of the file to collect stdout
  -S number of header lines in standard output
- -N nice level (0-19)
- -D ionice level (0-7)
+ -N nice level (0-19) [19]
+ -D ionice level (0-7) [5]
  -t separator pattern for the split command.
 
 command formatting:
@@ -53,8 +53,8 @@ sheader=0
 dryrun=0
 stderrfile=""
 stdoutfile=""
-nicelvl=0
-ionicelvl=0
+nicelvl=19
+ionicelvl=5
 sep=
 
 while getopts "hnp:i:o:I:O:H:e:s:S:N:D:t:" opt; do
@@ -196,6 +196,7 @@ clean_exit() {
 }
 
 ((dryrun)) || trap clean_exit ERR SIGINT SIGTERM EXIT
+#TODO: this trap should kill children jobs!!!
 
 # Setup filenames in temporary directory
 
@@ -256,8 +257,8 @@ fi
 echo "    - tmpdir: ${thistmpdir:-}
     - tmpinputs: ${tmpinputs[@]:-}
     - tmpoutputs: ${tmpoutputs[@]:-}
-    - tmpstdoutfile: ${tmpstdoutfile}
-    - tmpstderrfile: ${tmpstderrfile}" >&2
+    - tmpstdoutfile: ${tmpstdoutfile:-}
+    - tmpstderrfile: ${tmpstderrfile:-}" >&2
 
 # Split input files
 
@@ -438,6 +439,7 @@ fi
 if [[ -n "$stdoutfile" ]]; then
     merge_output_with_header $sheader "$stdoutfile" "$tmpstdoutfile"
     # For the clean exit:
+    # TODO: handle the case where nothing was outputted to stdout. (error in `head`)
     tmpoutputs+=("$tmpstdoutfile")
 fi
 
