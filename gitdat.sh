@@ -8,6 +8,8 @@ help="USAGE: $0 <command> [<args> ...].
 Avaible commands:
 
 - untracked
+- find
+- findsame
 - track
 - untrack
 - rm
