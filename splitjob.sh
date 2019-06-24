@@ -190,7 +190,9 @@ clean_exit() {
     for output in ${tmpoutputs[@]:-}; do
         rm -v ${output}-+([0-9]) || :
     done
-    rmdir -v "$thistmpdir" || :
+    if [[ -n "${thistmpdir:-}" ]]; then
+        rmdir -v "$thistmpdir" || :
+    fi
 
     echo "Last return code: $last_exit. Exit." >&2
 }
