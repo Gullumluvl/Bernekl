@@ -17,6 +17,7 @@ for line in fileinput.input():
     r = repr(line)[1:-1]
     #TODO: colorize backslaches too, to avoid colorizing escaped characters
     #      like escaped \t or \n (written as \\t or \\n)
+    r = r.replace(r'\x00',  '\033[1;31m\\0\033[0m')  # NUL char in bold red
     r = r.replace(r'\\',  '\033[0;36m\\\033[0m')  # white backslash
     r = r.replace(r'\t', '\033[0;33m\\t\033[0m') # yellow tab
     r = r.replace(r'\n', '\033[1;30m\\n\033[0m') # darkgrey newline
