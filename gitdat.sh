@@ -3,26 +3,75 @@
 set -eu
 IFS=$'\t\n'
 
+
 help="USAGE: $0 <command> [<args> ...].
 
-Avaible commands:
+<args> can be taken from stdin (one per line).
 
-- untracked
-- find
-- findsame
+
+COMMANDS:
+
+- help
+- untracked - list files not in the index
+- find      - find all files whose name matches the given pattern, and tell if
+              it is tracked in git, in rsync, or untracked.
+              Supports all grep options.
+- findsame  - find all files with the same basename: list extensions (colored).
 - track
 - untrack
-- rm
-- push
-- pull
-- log
+- rm        - untrack and remove the file.
+- [push]
+- [pull]
+- [log]
+
+
+COLOR CODES:
+
+green=git-tracked
+purple=rsync-tracked
+none=untracked
+
+
+EXAMPLES:
+
+# Useful command to see if untracked files have tracked source files
+# (same basename, different extension):
+
+    gitdat.sh untracked | gitdat.sh findsame
+
+# Only print 'forgotten' files: no source nor output is tracked:
+
+    gitdat.sh untracked | gitdat.sh findsame | grep -v \$'\\x1b\\[0'
 "
+
+
+if [[ $# -eq 0 ]] || [[ "$1" =~ ^(help|--help|-h|-\?)$ ]]; then
+    echo "$help"
+    exit
+fi
+
+#untracked
+#exit 0
+
+#echo "DEBUG: checking arguments" >&2
+
+action=$1
+shift
+
+if [[ -t 0 ]]; then
+    arglist=($@)
+else
+    while IFS= read -r line; do
+        arglist+=("${line}")
+    done
+fi
 
 
 trackfile="gitdata.index"
 ignorefile="gitdata.ignore"
 
 [[ -f "$trackfile" ]] || { echo "trackfile '$trackfile' does not exists." >&2 ; exit 1 ; }
+
 
 #echo "DEBUG: define functions." >&2
 
@@ -128,29 +177,10 @@ findsame() {
                 other_ext+=(${same##*.})
             fi
         done
-        echo -e "${col:-}${other_ext[@]:-}$RESET"
+        echo -e "${col:-}${other_ext[@]:-}${col:+$RESET}"
     done
 }
 
-
-[[ $# -ge 1 ]] || { echo "WRONG USAGE: gitdata.sh <command> [<args> ...]" >&2 ; exit 2 ; }
-
-
-#untracked
-#exit 0
-
-#echo "DEBUG: checking arguments" >&2
-
-action=$1
-shift
-
-if [[ -t 0 ]]; then
-    arglist=($@)
-else
-    while IFS= read -r line; do
-        arglist+=("${line}")
-    done
-fi
 
 case "$action" in
     untracked)
@@ -170,7 +200,7 @@ case "$action" in
     findsame)
         findsame ${arglist[@]:-} ;;
     *)
-        echo "$help" && exit 2 ;;
+        echo -e "ERROR: unknown command.\n$help" && exit 2 ;;
 
 esac
 
