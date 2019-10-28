@@ -158,7 +158,7 @@ if (( $nicelvl )); then
 fi
 
 
-maxpart=$(( ${#nparts} - 1 ))
+maxpart=$(( ${#nparts} - 1 ))  # String length of this number.
 sufflen="${#maxpart}"
 
 # TODO: Simply force sufflen=2 and do not allow more than 100 parts...
@@ -181,7 +181,7 @@ echo "DEBUG:
     - command:     '$command'" >&2
 
 # Cleanup temporary files in case of error
-clean_exit() {
+cleanup() {
     last_exit=$?
     echo "Cleaning Temporary files.">&2
     for input in ${tmpinputs[@]:-}; do
@@ -197,7 +197,7 @@ clean_exit() {
     echo "Last return code: $last_exit. Exit." >&2
 }
 
-((dryrun)) || trap clean_exit ERR SIGINT SIGTERM EXIT
+((dryrun)) || trap cleanup ERR SIGINT SIGTERM EXIT
 #TODO: this trap should kill children jobs!!!
 
 # Setup filenames in temporary directory
@@ -262,8 +262,37 @@ echo "    - tmpdir: ${thistmpdir:-}
     - tmpstdoutfile: ${tmpstdoutfile:-}
     - tmpstderrfile: ${tmpstderrfile:-}" >&2
 
-# Split input files
+unsplit() {
+    ## When splitted into too many files (because of split reading from stdin),
+    ## reduces the number of outputs to the requested number (with records in order).
+    local tmpinput=$1
+    local sufflen=$2
+    local nparts=$3
 
+    local out=("${tmpinput}"-*([0-9])[0-9])
+    local nout=$(( ${#out[@]} - 1 ))
+    #(( nout+1 > nparts )) || return 0
+
+    local pack=$(( nout / nparts ))
+    local remain=$(( nout % nparts ))
+
+    local next_first=1
+
+    #for p in {0..$((nparts-1))}; do
+    for ((p=0; p<=nparts-1; p++)); do
+        local packsize=$(( (0<p && p<=remain) ? pack+1 : pack ))
+        #packsize=$(( p<remain ? pack+1 : pack ))
+        local infiles=($(seq -f "${tmpinput}-%0${sufflen}.0f" $((next_first)) $((next_first + packsize - 1))))
+        (( ${#infiles[@]} )) || { echo "Zero input files.">&2 ; break ; }
+        printf -v unsplitoutfile "${tmpinput}-%0${sufflen}d" $p
+        #echo "# PUT ${infiles[@]} >> $unsplitoutfile  && rm infiles."
+        cat ${infiles[@]} >> "$unsplitoutfile" && rm ${infiles[@]}
+        ((next_first += packsize))
+
+    done
+}
+
+# Split input files
 if [[ -n "$sep" ]]; then
     split_cmd_base() {
         local input=$1
@@ -291,10 +320,20 @@ else
         local sufflen=$3
         local nparts=$4
         if (( dryrun )); then
-            echo '$' 'split -d -a '$sufflen' -n "l/'$nparts'" "'${input}'" "'${tmpinput}'-"'
+            if [[ "$input" =~ ^/dev/fd/ ]]; then
+                echo '$' 'split -d -a '$sufflen' -l 1000 "'${input}'" "'${tmpinput}'-"'
+                echo '$ unsplit "'${tmpinput}'" '$sufflen' '"$nparts"
+            else
+                echo '$' 'split -d -a '$sufflen' -n "l/'$nparts'" "'${input}'" "'${tmpinput}'-"'
+            fi
         else
-            #[[ -n "$(sed -n /$sep/pq $input)" ]] || {
-            split -d -a $sufflen -n "l/$nparts" "${input}" "${tmpinput}-"
+            if [[ "$input" =~ ^/dev/fd/ ]]; then
+                split -d -a $sufflen -l 1000 "${input}" "${tmpinput}-"
+                unsplit "${tmpinput}" $sufflen $nparts
+            else
+                #[[ -n "$(sed -n /$sep/pq $input)" ]] || {
+                split -d -a $sufflen -n "l/$nparts" "${input}" "${tmpinput}-"
+            fi
         fi
     }
 fi
@@ -408,7 +447,7 @@ for ipid in ${!allpids[@]}; do
     waitreturns+=($waitreturn)
 done
 set -e
-trap clean_exit ERR SIGINT SIGTERM EXIT
+trap cleanup ERR SIGINT SIGTERM EXIT
 
 echo "Merging output files" >&2
 
@@ -449,4 +488,7 @@ fi
 trap - ERR SIGINT SIGTERM EXIT
 
 echo "Part return codes: ${waitreturns[@]}" >&2
-clean_exit
+cleanup
+
+[[ "${waitreturns}" =~ [1-9] ]] && return=1 || return=0
+exit $return
