@@ -88,8 +88,9 @@ for arg in ${arglist[@]}; do
 	#percentage="$(python3 -c 'print("%.2f" % (100*'$((++count))'/'$total'))')"
 	#percentage="$(perl -e 'printf "%.2f", 100*'$((++count))'/'$total'')"
 	#percentage="$(awk 'BEGIN{100*'$((++count))'/'$total'}')"
+	w=$(( $(tput cols) - 23 ))
 	percentage="$(awk 'BEGIN{printf "%.2f", 100*'$((++count))'/'$total'}')"
-	printf "\r%5d/%d (%s%%) : $arg " $((++count)) $total $percentage >&2
+	printf "\r%5d/%d (%s%%) : %-${w}.${w}s " $((++count)) $total $percentage $arg >&2
 	#echo "$arg"
 	argaction="${action//\{\}/$arg}"
 	argaction="${argaction//\{\.\}/$arg_noext}"
