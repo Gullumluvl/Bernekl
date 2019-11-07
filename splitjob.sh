@@ -224,7 +224,13 @@ if [[ -n "${TMPDIR:-}" ]]; then
     #fi
     tmpinputs=()
     for input in ${inputs[@]:-}; do
-        tmpinputs+=("$thistmpdir/${input##*/}")
+        if [[ "$input" = "-" ]]; then
+            tmpinputs+=("$thistmpdir/stdin")
+        elif [[ "$input" =~ ^/dev/fd/ ]]; then
+            tmpinputs+=("$thistmpdir/stream${input##*/}")
+        else
+            tmpinputs+=("$thistmpdir/${input##*/}")
+        fi
     done
     #if (( ${#outputs[@]} )); then
     #    tmpoutputs+=(${outputs[@]/#*\//$thistmpdir})
@@ -237,7 +243,13 @@ if [[ -n "${TMPDIR:-}" ]]; then
     #tmpall=(${any[@]/#*\//$thistmpdir})
     tmpall=()
     for any in ${all[@]:-}; do
-        tmpall+=("$thistmpdir/${any##*/}")
+        if [[ "$any" = "-" ]]; then  # Need to check if this is not an output!
+            tmpall+=("$thistmpdir/stdin")
+        elif [[ "$any" =~ ^/dev/fd/ ]]; then
+            tmpall+=("$thistmpdir/stream${any##*/}")
+        else
+            tmpall+=("$thistmpdir/${any##*/}")
+        fi
     done
 
     #echo ${tmpinputs[@]}
@@ -320,14 +332,14 @@ else
         local sufflen=$3
         local nparts=$4
         if (( dryrun )); then
-            if [[ "$input" =~ ^/dev/fd/ ]]; then
+            if [[ "$input" = "-" ]] || [[ "$input" =~ ^/dev/fd/ ]]; then
                 echo '$' 'split -d -a '$sufflen' -l 1000 "'${input}'" "'${tmpinput}'-"'
                 echo '$ unsplit "'${tmpinput}'" '$sufflen' '"$nparts"
             else
                 echo '$' 'split -d -a '$sufflen' -n "l/'$nparts'" "'${input}'" "'${tmpinput}'-"'
             fi
         else
-            if [[ "$input" =~ ^/dev/fd/ ]]; then
+            if [[ "$input" = "-" ]] || [[ "$input" =~ ^/dev/fd/ ]]; then
                 split -d -a $sufflen -l 1000 "${input}" "${tmpinput}-"
                 unsplit "${tmpinput}" $sufflen $nparts
             else
@@ -490,5 +502,5 @@ trap - ERR SIGINT SIGTERM EXIT
 echo "Part return codes: ${waitreturns[@]}" >&2
 cleanup
 
-[[ "${waitreturns}" =~ [1-9] ]] && return=1 || return=0
+[[ "${waitreturns[@]}" =~ [1-9] ]] && return=1 || return=0
 exit $return
