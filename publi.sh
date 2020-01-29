@@ -9,7 +9,8 @@ destfile="-"
 while [[ "$destfile" =~ ^-.* ]]; do
     [ "$destfile" != "-" ] && options+=("$destfile")
     
-    destfile="$1" || {
+    destfile="${1:-}"
+    [ -n "$destfile" ] || {
         echo "Missing arguments: <destfile> [<pandoc options> ...]" >&2;
         exit 1;
     }
