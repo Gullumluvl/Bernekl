@@ -65,7 +65,8 @@ else
         arglist+=("${line}")
     done
 fi
-
+#echo -n "DEBUG: arglist=<"
+#for arg in ${arglist[@]}; do echo -n "|$arg"; done; echo '>'
 
 trackfile="gitdata.index"
 ignorefile="gitdata.ignore"
@@ -77,9 +78,9 @@ ignorefile="gitdata.ignore"
 
 untracked() {
     #echo "Untracked files:" >&2
-    find . ! -type d -printf "%p\n" \
+    find . \! -type d -printf '%p\n' \
         | grep -vf "$ignorefile" \
-        | fgrep -vwf <( git ls-files --full-name | sed 's_^_./_' ) \
+        | fgrep -vwf <(git ls-files --full-name | sed 's_^_./_') \
         | fgrep -vwf $trackfile
 }
 
@@ -129,19 +130,29 @@ ITAL="\e[00;03m"
 
 
 trackfind() {
-    git ls-files --full-name | sed 's_^_./_' | grep --color=always $@ | sed 's/^/git:/'
-    nogit=${PIPESTATUS[2]}
+    OPTS=()
+    while [[ "$1" =~ ^- ]]; do
+        OPTS+=($1)
+        shift
+    done
+    #echo "DEBUG: OPTS=${OPTS[@]}."
+    while [[ "$#" -gt 0 ]]; do
+        arg=$1
+        shift
+        #echo "DEBUG:  arg=$arg"
+        git ls-files --full-name | sed 's_^_./_' | grep --color=always ${OPTS[@]} "$arg" | sed 's/^/git:            /'
+        nogit=${PIPESTATUS[2]}
 
-    grep --color=always $@ "$trackfile" | sed 's/^/track:/'
-    notrack=${PIPESTATUS[0]}
+        grep --color=always ${OPTS[@]} "$arg" "$trackfile" | sed 's/^/track:          /'
+        notrack=${PIPESTATUS[0]}
 
-    #if (( $nogit && $notrack )) ; then
-    untracked | grep --color=always $@ | sed 's/^/local untracked:/'
-    nofile=${PIPESTATUS[1]}
-    #fi
+        #if (( $nogit && $notrack )) ; then
+        untracked | grep --color=always ${OPTS[@]} "$arg" | sed 's/^/local untracked:/'
+        nofile=${PIPESTATUS[1]}
+        #fi
 
-    if (( $nogit && $notrack && $nofile )); then return 1; fi
-
+        (( $nogit && $notrack && $nofile )) && echo "NO MATCH:       $arg"
+    done
 }
 #trackpush() {}
 #trackpull() {}
@@ -160,11 +171,11 @@ findsame() {
             #ext=""
         fi
 
-        #if [[ $arg =~ showork/jobim ]]; then echo "DEBUG: base='$base' ext='$ext'" >&2 && break; fi
+        #if [[ $arg =~ diseq-and-postest ]]; then echo "DEBUG: base='$base' ext='$ext'";fi #>&2 && break; fi
         other_ext=()
         echo -ne "$arg:\t"
         for same in "$dir/${name}".*; do
-            #echo "DEBUG: same=$same" >&2
+            #[[ $arg =~ diseq-and-postest ]] && echo "DEBUG: same=$same"
             if ! grep -qf "$ignorefile" <<<"$same" && ! [[ -d "$same" ]] && ! [[ "$same" -ef "$arg" ]]; then
                 # Find if this other file is tracked/versioned:
                 status="$(trackfind -xF "$same" | cut -d':' -f1)"
@@ -174,13 +185,56 @@ findsame() {
                     *) col="" ;;
                 esac
 
-                other_ext+=(${same##*.})
+                other_ext+=("${col:-}${same##*.}${col:+$RESET}")
+            else
+                status="ignored"
+                col=""
             fi
         done
-        echo -e "${col:-}${other_ext[@]:-}${col:+$RESET}"
+        echo -e "${other_ext[@]:-}"
     done
 }
 
+finddup() {
+    ncols=`tput cols`
+    for arg in $@; do
+        dir=$(dirname $arg)
+        base=$(basename $arg)
+
+        #other_path=()
+        if [ -e "$arg" ]; then
+            dups="$(find -name "${base}" \! -wholename "$arg" -printf '%p\t%TY-%Tm-%Td %TH:%TM:%.2TS\n')"
+            modif_time=$(date -d "@$(stat -c '%Y' "$arg")" "+%Y-%m-%d %H:%M:%S") 
+        else
+            dups="$(find -name "${base}" -printf '%p\t%TY-%Tm-%Td %TH:%TM:%.2TS\n')"
+            modif_time=''
+        fi
+        if [[ -n "${dups}" ]]; then
+            avail_width=$((ncols - ${#arg} - 3))
+            printf '\n# %s %*s\n' "$arg" $avail_width "${modif_time}"
+            while IFS=$'\t' read same mtime; do
+                avail_width=$((ncols - ${#same} - 1))
+                if [[ "$mtime" = "$modif_time" ]]; then
+                    mtime='"'
+                    printf '%s %*s\n' "$same" $avail_width $mtime
+                elif [[ "$mtime" > "$modif_time" ]]; then
+                    printf "%s ${RED}%*s${RESET}\n" "$same" $avail_width $mtime
+                else
+                    printf "%s ${GREEN}%*s${RESET}\n" "$same" $avail_width $mtime
+                fi
+            done <<< "${dups}"
+        fi
+            #echo "DEBUG: same=$same" >&2
+            # Find if this other file is tracked/versioned:
+            #status="$(trackfind -xF "$same" | cut -d':' -f1)"
+            #case "$status" in
+            #    git) col=$GREEN ;;
+            #    track) col=$PURPLE ;;
+            #    *) col="" ;;
+            #esac
+            #other_path+=(${same})
+    done
+}
 
 case "$action" in
     untracked)
@@ -199,6 +253,8 @@ case "$action" in
         trackfind ${arglist[@]:-} ;;
     findsame)
         findsame ${arglist[@]:-} ;;
+    finddup)
+        finddup ${arglist[@]:-} ;;
     *)
         echo -e "ERROR: unknown command.\n$help" && exit 2 ;;
 

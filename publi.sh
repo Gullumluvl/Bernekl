@@ -38,9 +38,9 @@ for ext in "mkd" "md" "markdown" "txt"; do
             --from=markdown \
             -c $HOME/.pandoc/styles/buttondown.css \
             --filter=pandoc-expandpaths.py \
-            --lua-filter=task-list.lua \
             --standalone \
             --mathjax \
+            --email-obfuscation=javascript \
             ${options[@]:-} \
             -o "$destfile" -- "$basefilename.$ext"
         done=1
