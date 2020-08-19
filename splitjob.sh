@@ -278,15 +278,49 @@ unsplit() {
     ## When splitted into too many files (because of split reading from stdin),
     ## reduces the number of outputs to the requested number (with records in order).
     local tmpinput=$1
-    local sufflen=$2
+    local input_sufflen=$2
     local nparts=$3
+    local sufflen=${4:-$input_sufflen}  # Output suffix length
 
-    local out=("${tmpinput}"-*([0-9])[0-9])
-    local nout=$(( ${#out[@]} - 1 ))
+    shopt -s failglob  # exit if no match.
+    local out=("${tmpinput}"-*([0-9])[0-9])  # Does not depend on input_sufflen
+    shopt -u failglob
+    local nout=$(( ${#out[@]} - 1 ))  # It's an index, not a count.
     #(( nout+1 > nparts )) || return 0
 
     local pack=$(( nout / nparts ))
     local remain=$(( nout % nparts ))
+
+    if (( !pack )); then
+        # There are already fewer parts than wanted. **Resplit** again to reach the wanted nparts.
+        local resplitchunks=$(( nparts / (nout+1) ))
+        local resplitremain=$(( nparts % (nout+1) ))
+        newstart=$nparts
+        # Recurse in reverse order to avoid overwriting while renumbering
+        for ((p=nout; p>=0; p--)); do
+            local resplitchunks_p=$(( nout-p+1<resplitremain ? resplitchunks+1 : resplitchunks))
+            (( resplitchunks_p == 1 )) && break
+            (( newstart-=resplitchunks_p )) || :
+            printf -v tmpinput_p "${tmpinput}-%0${input_sufflen}d" $p
+            # Or identically: tmpinput_p="${out[$p]}"
+            #echo "# RESPLIT $tmpinput_p -> $(seq -s' ' $newstart $(( newstart + resplitchunks_p - 1)))"
+            if (( newstart==0 )); then
+                # Split can't overwrite the input file: so let's make new files have a longer suffix.
+                #FIXME!!! The first file (00) is never added back -> lost!
+                #echo "Special split case (p=${p}; nout=${nout})">&2
+                split --verbose -d -a "$((sufflen))" -n "l/$resplitchunks_p" "$tmpinput_p" "${tmpinput_p}-" && rm "$tmpinput_p"
+                i=0
+                for f in $(seq -f "${tmpinput_p}-%0$((sufflen)).0f" 0 $((resplitchunks_p-1))); do
+                    printf -v newf "${tmpinput}-%0$((sufflen))d" $((i++))
+                    mv "$f" "$newf"
+                done
+            else
+                split --verbose --numeric="$newstart" -a "${sufflen}" -n "l/$resplitchunks_p" "$tmpinput_p" "${tmpinput}-" && rm "$tmpinput_p"
+                # we remove the source file anyway, so should be ok even if sufflen is different for new vs old splits.
+            fi
+        done
+        return 0
+    fi
 
     local next_first=1
 
@@ -294,7 +328,7 @@ unsplit() {
     for ((p=0; p<=nparts-1; p++)); do
         local packsize=$(( (0<p && p<=remain) ? pack+1 : pack ))
         #packsize=$(( p<remain ? pack+1 : pack ))
-        local infiles=($(seq -f "${tmpinput}-%0${sufflen}.0f" $((next_first)) $((next_first + packsize - 1))))
+        local infiles=($(seq -f "${tmpinput}-%0${input_sufflen}.0f" $((next_first)) $((next_first + packsize - 1))))
         (( ${#infiles[@]} )) || { echo "Zero input files.">&2 ; break ; }
         printf -v unsplitoutfile "${tmpinput}-%0${sufflen}d" $p
         #echo "# PUT ${infiles[@]} >> $unsplitoutfile  && rm infiles."
@@ -318,6 +352,9 @@ if [[ -n "$sep" ]]; then
             echo "Nul characters already present in $input, can't use them as separator." >&2;
             exit 1; }
         if (( dryrun )); then
+            # Count the number of units in the file:
+            units=$(grep -co "$sep")
+            (( units++ ))
             echo '$' 'sed "s/'$sep'/\x0\1/g" "'$input'" | split -t'"'"'\0'"'"' -d -a '$sufflen' -n "l/'$nparts'" - "'${tmpinput}'-"'
         else
             #[[ -n "$(sed -n /$sep/pq $input)" ]] || {
@@ -333,15 +370,22 @@ else
         local nparts=$4
         if (( dryrun )); then
             if [[ "$input" = "-" ]] || [[ "$input" =~ ^/dev/fd/ ]]; then
-                echo '$' 'split -d -a '$sufflen' -l 1000 "'${input}'" "'${tmpinput}'-"'
-                echo '$ unsplit "'${tmpinput}'" '$sufflen' '"$nparts"
+                units=$(cat "$input" | wc -l)
+                nouts=$(( units / 1000 + (units % 1000 > 0) ))
+                echo '$' 'split -d -a 2 -l 1000 "'${input}'" "'${tmpinput}'-"'
+                echo '$ unsplit "'${tmpinput}'" 2 '"$nparts"' '"$sufflen"
+                if (( nouts > nparts )); then
+                    echo "[UNsplit from $nouts to $nparts parts]"
+                elif (( nouts < nparts )); then
+                    echo "[REsplit from $nouts to $nparts parts]"
+                fi
             else
                 echo '$' 'split -d -a '$sufflen' -n "l/'$nparts'" "'${input}'" "'${tmpinput}'-"'
             fi
         else
             if [[ "$input" = "-" ]] || [[ "$input" =~ ^/dev/fd/ ]]; then
-                split -d -a $sufflen -l 1000 "${input}" "${tmpinput}-"
-                unsplit "${tmpinput}" $sufflen $nparts
+                split -d -a 2 -l 1000 "${input}" "${tmpinput}-"
+                unsplit "${tmpinput}" 2 $nparts $sufflen
             else
                 #[[ -n "$(sed -n /$sep/pq $input)" ]] || {
                 split -d -a $sufflen -n "l/$nparts" "${input}" "${tmpinput}-"
