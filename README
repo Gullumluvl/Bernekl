@@ -1,4 +1,18 @@
-Mytools
+Bernekl
 =======
 
-Collection of personal scripts for my own workflow.
+Miscellaneous shell tools for productivity.
+
+Aiming at general purposes, but was designed by a bioinformatician in an academic setup.
+
+- `splitjob`: convert one shell command applied on large input/output files into several parallel commands producing the same result;
+- `beamsync.sh`: manage many repositories (git/rsync) of a single computer (display synchronisation status, batch synchronize);
+- `seeesc`: print special characters and escape sequences with colors;
+- `gitdat.sh`: several git-like functions but combining rsynced content;
+- `publi.sh`: quick pandoc conversion with all relevant options;
+- `printprogress_for.sh`: repeatedly run command while displaying progress.
+
+---
+
+License: [Unlicense](https://unlicense.org/)
+
